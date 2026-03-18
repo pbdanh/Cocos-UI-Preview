@@ -1,0 +1,111 @@
+[
+    {
+        "layoutType": "Absolute",
+        "name": "root",
+        "w": 720, "h": 1280,
+        "useSafeArea": true,
+        "children": [
+            {
+                "type": "sprite",
+                "name": "bgMain",
+                "x": 360, "y": 640,
+                "w": 720, "h": 1280,
+                "scaleMode": "FILL"
+            },
+            {
+                "layoutType": "Absolute",
+                "name": "pnlHeader",
+                "height": 86,
+                "pinEdges": [0, false, 0, 0],
+                "scaleMode": "FIT",
+                "children": [
+                    {
+                        "type": "sprite",
+                        "name": "bgTop",
+                        "x": 360, "y": 43,
+                        "w": 720, "h": 86
+                    },
+                    {
+                        "layoutType": "Linear",
+                        "flexDirection": "row",
+                        "name": "rowGold",
+                        "gap": 10,
+                        "alignItems": "center",
+                        "left": 15, "verticalCenter": 0,
+                        "anchor": [0, 0.5],
+                        "children": [
+                            {
+                                "type": "sprite",
+                                "name": "iconGold",
+                                "w": 40, "h": 40
+                            },
+                            {
+                                "type": "label",
+                                "name": "lblGold",
+                                "text": "1,500"
+                            }
+                        ]
+                    },
+                    {
+                        "type": "button",
+                        "name": "btnSettings",
+                        "title": "⚙",
+                        "w": 60, "h": 60,
+                        "right": 10, "verticalCenter": 0,
+                        "anchor": [1, 0.5]
+                    }
+                ]
+            },
+            {
+                "layoutType": "Linear",
+                "flexDirection": "column",
+                "name": "colGames",
+                "horizontalCenter": 0,
+                "verticalCenter": 0,
+                "gap": 20,
+                "alignItems": "center",
+                "children": [
+                    {
+                        "type": "button",
+                        "name": "btnGame1",
+                        "title": "Play Game A",
+                        "w": 300, "h": 80
+                    },
+                    {
+                        "type": "button",
+                        "name": "btnGame2",
+                        "title": "Play Game B",
+                        "w": 300, "h": 80
+                    }
+                ]
+            },
+            {
+                "layoutType": "Absolute",
+                "name": "pnlFooter",
+                "height": 100,
+                "bottom": 0, "left": 0, "right": 0,
+                "children": [
+                    {
+                        "type": "sprite",
+                        "name": "bgFooter",
+                        "x": 360, "y": 50,
+                        "w": 720, "h": 100
+                    },
+                    {
+                        "layoutType": "Linear",
+                        "flexDirection": "row",
+                        "name": "rowNav",
+                        "anchor": [0.5, 0.5],
+                        "verticalCenter": 0, "horizontalCenter": 0,
+                        "gap": 50,
+                        "children": [
+                            { "type": "button", "name": "navHome", "title": "Home", "w": 80, "h": 80 },
+                            { "type": "button", "name": "navShop", "title": "Shop", "w": 80, "h": 80 },
+                            { "type": "button", "name": "navProfile", "title": "Profile", "w": 80, "h": 80 }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+]

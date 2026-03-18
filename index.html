@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cocos UI Previewer</title>
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --panel-bg: #2d2d30;
+            --border-color: #3e3e42;
+            --text-color: #d4d4d4;
+            --accent-color: #007acc;
+            --hi-color: #0098ff;
+            --c-node: #6b6b6b;
+            --c-sprite: #4caf50;
+            --c-layout: #9c27b0;
+            --c-button: #e91e63;
+            --c-label: #2196f3;
+            --c-shape: #ff9800;
+        }
+
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color); color: var(--text-color);
+            display: flex; flex-direction: column; overflow: hidden;
+        }
+
+        /* --- Toolbar --- */
+        #toolbar {
+            height: 50px; background-color: var(--panel-bg);
+            border-bottom: 1px solid var(--border-color);
+            display: flex; align-items: center; padding: 0 16px; gap: 16px;
+            box-sizing: border-box; flex-shrink: 0; z-index: 100;
+        }
+        select, button, input {
+            background: var(--bg-color); color: var(--text-color);
+            border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px;
+        }
+        button:hover { background: var(--border-color); cursor: pointer; }
+        .title { font-weight: bold; font-size: 16px; color: var(--accent-color); margin-right: auto; }
+        
+        /* --- Main Area --- */
+        #main {
+            display: flex; flex: 1; min-height: 0; overflow: hidden;
+        }
+
+        /* --- Workspace / Canvas --- */
+        #workspace {
+            flex: 1; position: relative; overflow: auto;
+            background-image: 
+                linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        /* Wrapper adjusts its layout size to match the visual (scaled) size */
+        #screen-wrapper {
+            position: relative;
+            /* width/height are set via JS to designW*zoom x designH*zoom */
+        }
+
+        #screen-container {
+            background: #000;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            position: absolute;
+            left: 0; top: 0;
+            transform-origin: top left;
+            transition: width 0.3s, height 0.3s;
+            overflow: hidden; /* clip contents */
+        }
+        
+        /* The origin is at bottom-left in Cocos, but DOM is top-left. 
+           We'll create an wrapper that flips Y, so we can use bottom/left for positioning */
+        #cocos-root {
+            position: absolute; left: 0; bottom: 0; width: 100%; height: 100%;
+            /* Do not transform flip yet, we will position elements using left/bottom */
+        }
+
+        /* --- Nodes --- */
+        .c-node {
+            position: absolute;
+            box-sizing: border-box;
+            pointer-events: auto;
+            /* transformation handled via JS */
+        }
+        
+        .c-node:hover > .c-node-border {
+            border-color: #fff !important;
+            z-index: 1000;
+        }
+
+        .c-node-selected > .c-node-border {
+            border-color: var(--hi-color) !important;
+            box-shadow: 0 0 0 2px var(--hi-color);
+            z-index: 1000;
+        }
+
+        .c-node-border {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            border: 1px dashed var(--c-node);
+            background: rgba(107, 107, 107, 0.1);
+            pointer-events: none;
+        }
+
+        .c-sprite > .c-node-border { border: 1px solid var(--c-sprite); background: rgba(76, 175, 80, 0.1); }
+        .c-button > .c-node-border { border: 2px solid var(--c-button); background: rgba(233, 30, 99, 0.2); border-radius: 6px;}
+        .c-layout > .c-node-border { border: 1px dotted var(--c-layout); background: rgba(156, 39, 176, 0.05); }
+        .c-rect > .c-node-border { border: 1px solid var(--c-shape); background: rgba(255, 152, 0, 0.3); }
+
+        .c-node-label {
+            position: absolute; top: 0; left: 0; 
+            font-size: 10px; color: #fff; background: #000;
+            padding: 1px 4px; border-radius: 0 0 4px 0;
+            white-space: nowrap; pointer-events: none; opacity: 0.7;
+        }
+
+        .c-text-content {
+            width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            color: white; font-size: 16px; white-space: nowrap;
+            text-shadow: 1px 1px 1px #000; pointer-events: none;
+        }
+
+        /* --- Sidebars --- */
+        .sidebar {
+            width: 250px; background-color: var(--panel-bg);
+            border-left: 1px solid var(--border-color);
+            border-right: 1px solid var(--border-color);
+            display: flex; flex-direction: column; overflow: hidden;
+            flex-shrink: 0;
+        }
+        .sidebar-header {
+            padding: 8px 12px; font-weight: bold; font-size: 12px;
+            text-transform: uppercase; border-bottom: 1px solid var(--border-color);
+            background: #333337; color: #aaa;
+        }
+        .sidebar-content {
+            flex: 1; overflow-y: auto; padding: 8px; font-size: 13px;
+        }
+
+        /* Tree */
+        .tree-item { cursor: pointer; padding: 3px 0; white-space: nowrap; }
+        .tree-item:hover { background: rgba(255,255,255,0.05); }
+        .tree-item.selected { background: var(--accent-color); color: #fff; }
+        .tree-icon { display: inline-block; width: 14px; text-align: center; margin-right: 4px; font-size: 11px;}
+        .tree-indent { display: inline-block; width: 16px; }
+
+        /* Props */
+        .prop-row { display: flex; margin-bottom: 4px; }
+        .prop-label { width: 80px; color: #9cdcfe; }
+        .prop-val { flex: 1; color: #ce9178; word-break: break-all; }
+
+        /* Tabs */
+        .tabs { display: flex; border-bottom: 1px solid var(--border-color); background: #2d2d30; }
+        .tab-btn { flex: 1; text-align: center; padding: 6px 0; font-size: 11px; cursor: pointer; color: #aaa; text-transform: uppercase; border-bottom: 2px solid transparent; }
+        .tab-btn:hover { color: #fff; }
+        .tab-btn.active { color: #fff; border-bottom: 2px solid var(--accent-color); font-weight: bold; }
+        .tab-content { display: none; padding: 8px; flex: 1; overflow-y: auto; font-size: 13px; }
+        .tab-content.active { display: block; }
+
+        pre.json-view { margin: 0; font-family: Consolas, monospace; font-size: 11.5px; color: #d4d4d4; }
+
+        /* Animation timeline bars */
+        .anim-bar { display: flex; align-items: center; margin-bottom: 4px; font-size: 11px; }
+        .anim-bar-track { flex: 1; height: 14px; background: #333; border-radius: 3px; position: relative; overflow: hidden; margin-left: 6px; }
+        .anim-bar-fill { position: absolute; height: 100%; border-radius: 3px; }
+        .anim-bar-fill.intro { background: #4caf50; }
+        .anim-bar-fill.loop { background: #2196f3; }
+        .anim-bar-fill.exit { background: #ff5722; }
+        .anim-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; margin-right: 4px; color: #fff; }
+        .anim-tag.intro { background: #4caf50; }
+        .anim-tag.loop { background: #2196f3; }
+        .anim-tag.exit { background: #ff5722; }
+
+        /* Validation badges */
+        .v-item { padding: 4px 6px; margin-bottom: 3px; border-radius: 4px; font-size: 11.5px; cursor: pointer; }
+        .v-item:hover { filter: brightness(1.2); }
+        .v-error { background: rgba(244,67,54,0.15); border-left: 3px solid #f44336; }
+        .v-warning { background: rgba(255,152,0,0.15); border-left: 3px solid #ff9800; }
+        .v-info { background: rgba(33,150,243,0.12); border-left: 3px solid #2196f3; }
+
+        /* Editable inputs */
+        .edit-input { background: #1e1e1e; color: #ce9178; border: 1px solid #444; padding: 2px 4px; border-radius: 3px; width: 80px; font-size: 12px; }
+        .edit-input:focus { border-color: var(--accent-color); outline: none; }
+
+        /* Export code */
+        .export-code { background: #1a1a1a; color: #d4d4d4; font-family: Consolas, monospace; font-size: 11px; padding: 8px; border: 1px solid #333; border-radius: 4px; width: 100%; min-height: 200px; resize: vertical; }
+
+        /* Drag target */
+        #drop-zone {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8); color: white;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 24px; border: 4px dashed #666; z-index: 9999;
+            display: none;
+        }
+        body.dragover #drop-zone { display: flex; }
+    </style>
+    <script src="../template/src/core/ui-builder/_layout_engine.js?v=999"></script>
+</head>
+<body>
+
+    <div id="toolbar">
+        <div class="title">COCOS UI PREVIEWER</div>
+        
+        <div>
+            <label>Device: </label>
+            <select id="sel-device">
+                <option value="720x1280">Portrait (720x1280)</option>
+                <option value="1280x720">Landscape (1280x720)</option>
+                <option value="1080x1920">FHD Portrait (1080x1920)</option>
+                <option value="1920x1080">FHD Landscape (1920x1080)</option>
+                <option value="640x1136">iPhone 5 (640x1136)</option>
+                <option value="1125x2436">iPhone X (1125x2436)</option>
+            </select>
+        </div>
+        
+        <div>
+            <label>Zoom: </label>
+            <select id="sel-zoom">
+                <option value="0.25">25%</option>
+                <option value="0.5">50%</option>
+                <option value="0.75">75%</option>
+                <option value="1" selected>100%</option>
+                <option value="1.5">150%</option>
+                <option value="2">200%</option>
+            </select>
+        </div>
+        
+        <input type="file" id="file-input" accept=".json" style="display:none">
+        <button onclick="document.getElementById('file-input').click()">Load JSON</button>
+        <button id="btn-reload" disabled>Reload</button>
+        <button id="btn-validate" onclick="showValidation()" disabled>Validate</button>
+        <button id="btn-export" onclick="showExport()" disabled>Export</button>
+        
+        <div style="flex:1"></div>
+        <div id="status-text" style="color: #888; font-size: 12px;">Drop preview.json anywhere</div>
+    </div>
+
+    <div id="main">
+        <!-- Node Tree -->
+        <div class="sidebar" style="width: 220px;">
+            <div class="sidebar-header">Node Tree</div>
+            <div class="sidebar-content" id="tree-container">
+                <div style="color:#666; font-style:italic">No UI loaded</div>
+            </div>
+        </div>
+
+        <div id="workspace">
+            <div id="screen-wrapper">
+                <div id="screen-container" style="width: 720px; height: 1280px; transform: scale(1);">
+                    <div id="cocos-root"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Properties Sidebar -->
+        <div class="sidebar" style="width: 290px; border-left: 1px solid var(--border-color); border-right: none;">
+            <div class="tabs">
+                <div class="tab-btn active" onclick="switchTab('props')">Props</div>
+                <div class="tab-btn" onclick="switchTab('anims')">Anims</div>
+                <div class="tab-btn" onclick="switchTab('validate')">✓</div>
+                <div class="tab-btn" onclick="switchTab('export')">Export</div>
+                <div class="tab-btn" onclick="switchTab('json')">JSON</div>
+            </div>
+            <div id="tab-props" class="tab-content active">
+                <div style="color:#aaa; text-align:center; padding: 20px;">Select a node</div>
+            </div>
+            <div id="tab-anims" class="tab-content">
+                <div style="color:#666; font-style:italic">Select a node with animations</div>
+            </div>
+            <div id="tab-validate" class="tab-content">
+                <div style="color:#666; font-style:italic">Click Validate to check layout</div>
+            </div>
+            <div id="tab-export" class="tab-content">
+                <div style="margin-bottom:8px;">
+                    <div style="color:#aaa;font-size:11px;margin-bottom:6px;">EXPORT OPTIONS</div>
+                    <div class="prop-row"><div class="prop-label">Format</div>
+                        <select id="export-format" class="edit-input" style="width:120px">
+                            <option value="uibuilder" selected>UIBuilder Code</option>
+                            <option value="raw">Raw cc.* Code</option>
+                        </select>
+                    </div>
+                    <div class="prop-row"><div class="prop-label">Resources</div>
+                        <input class="edit-input" id="export-res-var" style="width:120px" placeholder="res_endgame" value="res_endgame">
+                    </div>
+                    <div class="prop-row"><div class="prop-label">Layer</div>
+                        <input class="edit-input" id="export-layer-name" style="width:120px" placeholder="EndGameLayer" value="EndGameLayer">
+                    </div>
+                    <div class="prop-row"><div class="prop-label">Wrap</div>
+                        <input type="checkbox" id="export-wrap" checked> <span style="font-size:11px;color:#888">Layer.extend</span>
+                    </div>
+                    <div style="margin-top:6px;">
+                        <button onclick="showExport()" style="font-size:11px;">🔄 Generate</button>
+                    </div>
+                </div>
+                <div id="export-output" style="color:#666; font-style:italic">Click Generate to export code</div>
+            </div>
+            <div id="tab-json" class="tab-content">
+                <pre class="json-view" id="json-viewer"></pre>
+            </div>
+        </div>
+    </div>
+
+    <div id="drop-zone">Drop JSON file to preview</div>
+
+    <script>
+        // --- State ---
+        let currentTree = null;
+        let currentFile = null;
+        let designSize = { w: 720, h: 1280 };
+        let nodesById = {};
+        let nextId = 1;
+        let selectedId = null;
+        let currentEngine = null; // Global engine reference for tooling
+
+        // --- DOM Elements ---
+        const E = {
+            screen: document.getElementById('screen-container'),
+            screenWrapper: document.getElementById('screen-wrapper'),
+            root: document.getElementById('cocos-root'),
+            device: document.getElementById('sel-device'),
+            zoom: document.getElementById('sel-zoom'),
+            file: document.getElementById('file-input'),
+            reload: document.getElementById('btn-reload'),
+            validate: document.getElementById('btn-validate'),
+            export: document.getElementById('btn-export'),
+            status: document.getElementById('status-text'),
+            tree: document.getElementById('tree-container'),
+            props: document.getElementById('tab-props'),
+            anims: document.getElementById('tab-anims'),
+            validateTab: document.getElementById('tab-validate'),
+            exportTab: document.getElementById('tab-export'),
+            jsonView: document.getElementById('json-viewer')
+        };
+
+        // Helper: sync screen container + wrapper to current designSize and zoom
+        function syncScreenSize() {
+            const zoom = parseFloat(E.zoom.value) || 1;
+            E.screen.style.width = designSize.w + 'px';
+            E.screen.style.height = designSize.h + 'px';
+            E.screen.style.transform = 'scale(' + zoom + ')';
+            // Wrapper takes the visual (scaled) size so workspace layout/centering works
+            E.screenWrapper.style.width = (designSize.w * zoom) + 'px';
+            E.screenWrapper.style.height = (designSize.h * zoom) + 'px';
+        }
+
+        // Initial sync on page load
+        syncScreenSize();
+
+        // --- Event Listeners ---
+        E.device.addEventListener('change', (e) => {
+            const [w, h] = e.target.value.split('x').map(Number);
+            designSize = { w, h };
+            syncScreenSize();
+            if (currentTree) renderTree();
+        });
+
+        E.zoom.addEventListener('change', (e) => {
+            syncScreenSize();
+        });
+
+        // Drag and drop
+        document.body.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('dragover'); });
+        document.body.addEventListener('dragleave', e => { e.preventDefault(); document.body.classList.remove('dragover'); });
+        document.body.addEventListener('drop', e => {
+            e.preventDefault(); document.body.classList.remove('dragover');
+            if (e.dataTransfer.files.length > 0) loadFile(e.dataTransfer.files[0]);
+        });
+
+        E.file.addEventListener('change', e => {
+            if (e.target.files.length > 0) loadFile(e.target.files[0]);
+        });
+
+        E.reload.addEventListener('click', () => {
+            if (currentFile) loadFile(currentFile);
+        });
+
+        // --- Core Engine ---
+
+        function loadFile(file) {
+            currentFile = file;
+            E.reload.disabled = false;
+            E.status.innerText = `Loading ${file.name}...`;
+            
+            const reader = new FileReader();
+            reader.onload = e => {
+                try {
+                    const json = JSON.parse(e.target.result);
+                    currentTree = Array.isArray(json) ? json[0] : json; // Take root if array
+                    E.status.innerText = `Loaded ${file.name} ✅`;
+                    renderTree();
+                } catch (err) {
+                    E.status.innerText = `Error parsing JSON ❌`;
+                    console.error(err);
+                    alert("Invalid JSON file");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Add auto-loading from URL param for easy CLI integration
+        window.addEventListener('DOMContentLoaded', () => {
+            const params = new URLSearchParams(window.location.search);
+            const fileUrl = params.get('file');
+            if (fileUrl) {
+                E.status.innerText = `Fetching ${fileUrl}...`;
+                fetch(fileUrl)
+                    .then(res => res.json())
+                    .then(json => {
+                        currentTree = Array.isArray(json) ? json[0] : json;
+                        E.status.innerText = `Loaded ${fileUrl} ✅`;
+                        E.reload.onclick = () => window.location.reload();
+                        E.reload.disabled = false;
+                        renderTree();
+                    })
+                    .catch(err => {
+                        E.status.innerText = `Failed to fetch ${fileUrl} ❌`;
+                        console.error(err);
+                    });
+            }
+        });
+
+        function renderTree() {
+            E.root.innerHTML = '';
+            E.tree.innerHTML = '';
+            E.props.innerHTML = '<div style="color:#666; font-style:italic">Select a node</div>';
+            nodesById = {};
+            selectedId = null;
+            if (!currentTree) return;
+
+            // Sync screen container size to designSize
+            syncScreenSize();
+
+            // Use the shared layout engine
+            const engine = new window.LayoutEngine();
+            engine.buildTree(currentTree);
+
+            // Simulate a device safe-area (e.g., iPhone Notch / Home indicator)
+            const simulatedSafeArea = { top: 44, bottom: 34, left: 0, right: 0 };
+            engine.computeLayout(designSize.w, designSize.h, simulatedSafeArea);
+            const computedTree = engine._root;
+
+            // Store global engine reference for tooling
+            currentEngine = engine;
+            E.validate.disabled = false;
+            E.export.disabled = false;
+            
+            // Build the quick-access id map from the computed tree
+            buildNodeMap(computedTree);
+
+            // Step 3: Render DOM
+            const dom = createDOMNode(computedTree);
+            E.root.appendChild(dom);
+
+            // Step 4: Render Tree UI
+            E.tree.appendChild(createTreeView(computedTree, 0));
+        }
+
+        function buildNodeMap(node) {
+            if (node._id) nodesById[node._id] = node;
+            if (node.children) {
+                node.children.forEach(buildNodeMap);
+            }
+        }
+
+        // --- View Generators ---
+
+        function createDOMNode(node) {
+            const el = document.createElement('div');
+            el.className = `c-node c-${node.type}`;
+            el.id = `node-${node._id}`;
+            
+            // Cocos coordinates: origin is bottom-left, anchors are 0-1
+            const w = node._width || 0;
+            const h = node._height || 0;
+            
+            // In DOM, `left` and `bottom` strictly denote the distance from the container's bottom-left edge
+            // to the child's bottom-left edge, ignoring any anchors. 
+            // We can resolve this distance purely utilizing the flattened absolute offsets:
+            let parentAbsX = 0;
+            let parentAbsY = 0;
+            if (node._parent) {
+                parentAbsX = node._parent._absX || 0;
+                parentAbsY = node._parent._absY || 0;
+            }
+            
+            const domLeft = (node._absX || 0) - parentAbsX;
+            const domBottom = (node._absY || 0) - parentAbsY;
+
+            el.style.width = w + 'px';
+            el.style.height = h + 'px';
+            el.style.left = domLeft + 'px';
+            el.style.bottom = domBottom + 'px';
+
+            // Apply visibility
+            if (node.visible === false || node._visible === false) {
+                el.style.display = 'none';
+            }
+
+            // Apply opacity (0-255 → 0-1)
+            var nodeOpacity = node._opacity !== undefined ? node._opacity : (node.opacity !== undefined ? node.opacity : 255);
+            if (nodeOpacity < 255) {
+                el.style.opacity = (nodeOpacity / 255).toFixed(3);
+            }
+
+            // Apply zOrder
+            var nodeZOrder = node._zOrder || node.zOrder || 0;
+            if (nodeZOrder !== 0) {
+                el.style.zIndex = nodeZOrder;
+            }
+
+            // Apply clipping
+            if (node.clipping || node._clipping) {
+                el.style.overflow = 'hidden';
+            }
+
+            const scaleX = node._scaleX !== undefined ? node._scaleX : 1;
+            const scaleY = node._scaleY !== undefined ? node._scaleY : 1;
+            const rotation = node._rotation || node.rotation || 0;
+            
+            // Build combined transform: scale + rotation, originating from anchor point
+            const hasTransform = scaleX !== 1 || scaleY !== 1 || rotation !== 0;
+            if (hasTransform) {
+                const aX = node.anchor ? (node.anchor[0] * 100) : 50;
+                const aY = node.anchor ? ((1 - node.anchor[1]) * 100) : 50; // CSS Y is inverted from Cocos
+                el.style.transformOrigin = `${aX}% ${aY}%`;
+                let transform = '';
+                if (scaleX !== 1 || scaleY !== 1) transform += `scale(${scaleX}, ${scaleY}) `;
+                if (rotation !== 0) transform += `rotate(${-rotation}deg)`; // Cocos CCW → CSS CW
+                el.style.transform = transform.trim();
+            }
+
+            // Visual decorators
+            const border = document.createElement('div');
+            border.className = 'c-node-border';
+            
+            const label = document.createElement('div');
+            label.className = 'c-node-label';
+            label.innerText = node.name || node.ref || node.type;
+
+            if (node.color) {
+                // hex or rgb support
+                const colStr = (typeof node.color === 'string') 
+                    ? node.color 
+                    : `rgba(${node.color.r},${node.color.g},${node.color.b},${(node.color.a||255)/255})`;
+                border.style.backgroundColor = colStr;
+                border.style.opacity = '0.5';
+            }
+
+            el.appendChild(border);
+            el.appendChild(label);
+
+            // Inner text content for labels/buttons
+            if (node.type === 'label' || node.type === 'text') {
+                const t = document.createElement('div');
+                t.className = 'c-text-content';
+                t.innerText = node.text || "Text";
+                el.appendChild(t);
+            } else if (node.type === 'button') {
+                if (node.title) {
+                    const t = document.createElement('div');
+                    t.className = 'c-text-content';
+                    t.innerText = node.title;
+                    el.appendChild(t);
+                }
+            }
+
+            // Events
+            el.addEventListener('click', e => {
+                e.stopPropagation();
+                selectNode(node._id);
+            });
+
+            // Children
+            if (node.children) {
+                node.children.forEach(c => el.appendChild(createDOMNode(c)));
+            }
+
+            return el;
+        }
+
+        function createTreeView(node, depth) {
+            const el = document.createElement('div');
+            
+            const item = document.createElement('div');
+            item.className = 'tree-item';
+            item.id = `tree-${node._id}`;
+            item.style.paddingLeft = (depth * 14 + 8) + 'px';
+            
+            let icon = '⬜';
+            if (node.type === 'sprite' || node.type === 'background') icon = '🖼️';
+            if (node.type === 'button') icon = '🔘';
+            if (node.type === 'label' || node.type === 'text') icon = '🔤';
+            if (node.type === 'layout') icon = '📐';
+            if (node.type === 'row' || node.type === 'column') icon = '☷';
+            if (node.type === 'scale9') icon = '🔲';
+            if (node.type === 'progressBar') icon = '📊';
+            if (node.layoutType === 'ScrollView') icon = '📜';
+            if (node.visible === false) icon = '👁️‍🗨️';
+
+            const name = node.name || node.ref || `[${node.type}]`;
+            item.innerHTML = `<span class="tree-icon">${icon}</span> ${name}`;
+            
+            item.addEventListener('click', () => selectNode(node._id));
+            el.appendChild(item);
+
+            if (node.children) {
+                node.children.forEach(c => el.appendChild(createTreeView(c, depth + 1)));
+            }
+            return el;
+        }
+
+        function selectNode(id) {
+            // Deselect old
+            if (selectedId) {
+                const oldEl = document.getElementById(`node-${selectedId}`);
+                if (oldEl) oldEl.classList.remove('c-node-selected');
+                const oldTree = document.getElementById(`tree-${selectedId}`);
+                if (oldTree) oldTree.classList.remove('selected');
+            }
+
+            selectedId = id;
+            
+            // Select new
+            const el = document.getElementById(`node-${id}`);
+            if (el) el.classList.add('c-node-selected');
+            const treeEl = document.getElementById(`tree-${id}`);
+            if (treeEl) {
+                treeEl.classList.add('selected');
+                treeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+
+            // Render props
+            const node = nodesById[id];
+            if (!node) return;
+
+            let html = '';
+            const propNames = ['type', 'name', 'ref', 'file', 'text', 'title', 'x', 'y', 'w', 'h', 'gap', 'layoutType'];
+            
+            // Basic raw props
+            propNames.forEach(k => {
+                if (node[k] !== undefined) html += makePropRow(k, node[k]);
+            });
+            
+            // Complex props
+            if (node.pinEdges) html += makePropRow('pinEdges', JSON.stringify(node.pinEdges));
+            if (node.anchor) html += makePropRow('anchor', `[${node.anchor.join(', ')}]`);
+            
+            html += '<hr style="border:0;border-top:1px solid #333;margin:8px 0">';
+            html += '<div style="color:#aaa;font-size:11px;margin-bottom:4px;">RESOLVED LAYOUT</div>';
+            html += makePropRow('Res. X', Math.round(node._x || 0));
+            html += makePropRow('Res. Y', Math.round(node._y || 0));
+            html += makePropRow('Abs. X', Math.round(node._absX || 0));
+            html += makePropRow('Abs. Y', Math.round(node._absY || 0));
+            html += makePropRow('Res. W', Math.round(node._width || 0));
+            html += makePropRow('Res. H', Math.round(node._height || 0));
+
+            // Visual properties
+            html += '<hr style="border:0;border-top:1px solid #333;margin:8px 0">';
+            html += '<div style="color:#aaa;font-size:11px;margin-bottom:4px;">VISUAL</div>';
+            html += makePropRow('visible', node._visible !== undefined ? node._visible : node.visible);
+            html += makePropRow('opacity', node._opacity !== undefined ? node._opacity : node.opacity);
+            html += makePropRow('rotation', node._rotation || node.rotation || 0);
+            html += makePropRow('zOrder', node._zOrder || node.zOrder || 0);
+            if (node.clipping) html += makePropRow('clipping', true);
+            if (node._scaleX !== undefined) html += makePropRow('scaleX', node._scaleX.toFixed(2));
+            if (node._scaleY !== undefined) html += makePropRow('scaleY', node._scaleY.toFixed(2));
+
+            // ScrollView metadata
+            if (node.layoutType === 'ScrollView') {
+                html += '<hr style="border:0;border-top:1px solid #333;margin:8px 0">';
+                html += '<div style="color:#aaa;font-size:11px;margin-bottom:4px;">SCROLLVIEW</div>';
+                html += makePropRow('scrollDir', node.scrollDirection || 'vertical');
+                html += makePropRow('contentW', Math.round(node._contentWidth || 0));
+                html += makePropRow('contentH', Math.round(node._contentHeight || 0));
+            }
+
+            // ProgressBar metadata
+            if (node.type === 'progressBar') {
+                html += '<hr style="border:0;border-top:1px solid #333;margin:8px 0">';
+                html += '<div style="color:#aaa;font-size:11px;margin-bottom:4px;">PROGRESSBAR</div>';
+                html += makePropRow('value', node.progressValue !== undefined ? node.progressValue : 'N/A');
+                html += makePropRow('min', node.progressMin !== undefined ? node.progressMin : 0);
+                html += makePropRow('max', node.progressMax !== undefined ? node.progressMax : 100);
+                html += makePropRow('direction', node.progressDirection || 'horizontal');
+            }
+
+            E.props.innerHTML = html;
+
+            // Render live-edit panel
+            if (currentEngine) {
+                let editHtml = '<hr style="border:0;border-top:1px solid #333;margin:8px 0">';
+                editHtml += '<div style="color:#aaa;font-size:11px;margin-bottom:4px;">LIVE EDIT</div>';
+                const editables = [
+                    { prop: 'width', label: 'Width', val: Math.round(node._width || 0) },
+                    { prop: 'height', label: 'Height', val: Math.round(node._height || 0) },
+                    { prop: 'opacity', label: 'Opacity', val: node.opacity !== undefined ? node.opacity : 255 },
+                    { prop: 'rotation', label: 'Rotation', val: node.rotation || 0 },
+                ];
+                editables.forEach(({ prop, label, val }) => {
+                    editHtml += `<div class="prop-row"><div class="prop-label">${label}</div>` +
+                        `<input class="edit-input" type="number" value="${val}" ` +
+                        `onchange="liveEdit('${node._id}','${prop}',this.value)"></div>`;
+                });
+                // Visible toggle
+                const visChecked = node.visible !== false ? 'checked' : '';
+                editHtml += `<div class="prop-row"><div class="prop-label">Visible</div>` +
+                    `<input type="checkbox" ${visChecked} onchange="liveEdit('${node._id}','visible',this.checked)"></div>`;
+                E.props.innerHTML += editHtml;
+            }
+
+            // Render animation tab for this node
+            renderAnimTab(node);
+
+            // Render JSON
+            try {
+                const jsonStr = JSON.stringify(node, (key, value) => {
+                    if (key && typeof key === 'string' && key.startsWith('_')) return undefined;
+                    return value;
+                }, 4);
+                E.jsonView.innerText = jsonStr;
+            } catch (e) {
+                E.jsonView.innerText = "// Error parsing JSON\n" + e.message;
+            }
+        }
+
+        // --- Live Edit ---
+        function liveEdit(nodeId, prop, value) {
+            if (!currentEngine) return;
+            let val = value;
+            if (prop === 'visible') val = !!value;
+            else val = parseFloat(value);
+            if (isNaN(val) && prop !== 'visible') return;
+
+            currentEngine.setNodeProp(nodeId, prop, val);
+            // Re-render the DOM from the updated engine state
+            renderTree();
+            // Re-select the node
+            setTimeout(() => selectNode(nodeId), 50);
+        }
+
+        // --- Animation Tab ---
+        function renderAnimTab(node) {
+            if (!node._animations || node._animations.length === 0) {
+                E.anims.innerHTML = '<div style="color:#666; font-style:italic; padding:10px;">No animations on this node</div>';
+                return;
+            }
+
+            let html = `<div style="color:#aaa;font-size:11px;margin-bottom:6px;">ANIMATIONS (${node._animations.length})</div>`;
+            const maxDur = Math.max(...node._animations.map(a => a.delay + a.duration)) || 1;
+
+            node._animations.forEach((a, i) => {
+                const startPct = (a.delay / maxDur * 100).toFixed(1);
+                const widthPct = (a.duration / maxDur * 100).toFixed(1);
+                html += `<div class="anim-bar">`;
+                html += `<span class="anim-tag ${a.sequence}">${a.sequence}</span>`;
+                html += `<span style="width:50px;color:#9cdcfe;">${a.prop}</span>`;
+                html += `<div class="anim-bar-track">`;
+                html += `<div class="anim-bar-fill ${a.sequence}" style="left:${startPct}%;width:${widthPct}%;"></div>`;
+                html += `</div></div>`;
+                html += `<div style="font-size:10px;color:#666;margin: 0 0 6px 4px;">` +
+                    `${a.from !== undefined ? a.from : '?'} → ${a.to} | ${a.duration}ms | ${a.easing}` +
+                    `${a.repeat === -1 ? ' | ∞' : a.repeat > 1 ? ' | ×' + a.repeat : ''}` +
+                    `${a.yoyo ? ' | yoyo' : ''}</div>`;
+            });
+
+            E.anims.innerHTML = html;
+        }
+
+        // --- Validation ---
+        function showValidation() {
+            if (!currentEngine) return;
+            const issues = currentEngine.validate();
+            switchTab('validate');
+
+            if (issues.length === 0) {
+                E.validateTab.innerHTML = '<div style="color:#4caf50;text-align:center;padding:20px;">✅ No issues found!</div>';
+                return;
+            }
+
+            const counts = { error: 0, warning: 0, info: 0 };
+            issues.forEach(i => counts[i.level]++);
+
+            let html = `<div style="margin-bottom:8px;font-size:11px;color:#aaa;">` +
+                `🔴 ${counts.error} errors · 🟡 ${counts.warning} warnings · 🔵 ${counts.info} info</div>`;
+
+            issues.forEach(issue => {
+                const cls = 'v-' + issue.level;
+                html += `<div class="v-item ${cls}" onclick="selectNode('${issue.nodeId}')">`;
+                html += `<strong>${issue.nodeId || '—'}</strong>: ${issue.message}</div>`;
+            });
+
+            E.validateTab.innerHTML = html;
+        }
+
+        // --- Export ---
+        function showExport() {
+            if (!currentEngine) return;
+            switchTab('export');
+
+            var format = document.getElementById('export-format').value;
+            var code;
+            if (format === 'uibuilder') {
+                code = currentEngine.exportUIBuilderCode({
+                    resourceMapVar: document.getElementById('export-res-var').value || '',
+                    layerName: document.getElementById('export-layer-name').value || 'GeneratedLayer',
+                    wrapInLayer: document.getElementById('export-wrap').checked,
+                    includeAnimations: true,
+                    includeComments: true
+                });
+            } else {
+                code = currentEngine.exportCocosCode({ includeAnimations: true });
+            }
+            var lineCount = code.split('\n').length;
+            document.getElementById('export-output').innerHTML = 
+                `<div style="margin-bottom:6px;">` +
+                `<button onclick="copyExport()" style="font-size:11px;">📋 Copy to Clipboard</button>` +
+                `<span style="color:#666;font-size:11px;margin-left:8px;">${lineCount} lines</span></div>` +
+                `<textarea class="export-code" id="export-code" readonly>${escapeHtml(code)}</textarea>`;
+        }
+
+        function copyExport() {
+            const el = document.getElementById('export-code');
+            if (el) {
+                navigator.clipboard.writeText(el.value).then(() => {
+                    E.status.innerText = 'Copied to clipboard ✅';
+                });
+            }
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            document.querySelector(`.tab-btn[onclick="switchTab('${tabId}')"]`).classList.add('active');
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+        }
+
+        function makePropRow(label, val) {
+            return `<div class="prop-row"><div class="prop-label">${label}</div><div class="prop-val">${val}</div></div>`;
+        }
+    </script>
+</body>
+</html>
