@@ -24,7 +24,7 @@ var fs = require('fs');
 var path = require('path');
 
 // Load LayoutEngine (single source of truth)
-var enginePath = path.join(__dirname, '..', 'template', 'src', 'core', 'ui-builder', '_layout_engine.js');
+var enginePath = path.join(__dirname, 'ui-builder', '_layout_engine.js');
 var LayoutEngine = require(enginePath);
 
 // Parse CLI arguments

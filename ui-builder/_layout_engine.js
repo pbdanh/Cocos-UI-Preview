@@ -1256,8 +1256,10 @@
     };
 
     /**
-     * Export the computed layout as UIBuilder-based Cocos2d-js code.
-     * Generates readable, developer-friendly code using UIBuilder API.
+     * Export responsive UIBuilder code from the original JSON tree.
+     * Generates code using UIBuilder layout APIs (pinEdges, createRow,
+     * createColumn, createFullScreenLayout, spaceBetween, fillParent)
+     * so the UI adapts to different screen sizes at runtime.
      *
      * @param {Object} options
      *   resourceMapVar : string   — JS variable name for resource map (e.g. "res_endgame")
@@ -1268,7 +1270,7 @@
      *   wrapInLayer       : boolean — wrap output in Layer.extend (default true)
      * @returns {string} JavaScript code string
      */
-    LayoutEngine.prototype.exportUIBuilderCode = function(options) {
+LayoutEngine.prototype.exportUIBuilderCode = function(options) {
         options = options || {};
         var resVar = options.resourceMapVar || '';
         var layerName = options.layerName || 'GeneratedLayer';
@@ -1276,44 +1278,37 @@
         var includeAnims = options.includeAnimations !== false;
         var includeComments = options.includeComments !== false;
         var wrapInLayer = options.wrapInLayer !== false;
-        var self = this;
 
         var lines = [];
-        var indent = '';       // current indentation level
-        var refNodes = [];     // collect button names for callback stubs
-        var nodeRefs = [];     // collect all node names for this._nodes map
+        var indent = '';
+        var refNodes = [];
+        var nodeRefs = [];
 
         function ln(s) { lines.push(indent + (s || '')); }
         function blank() { lines.push(''); }
+        function sanitizeName(name) { return (name || 'node').replace(/[^a-zA-Z0-9_$]/g, '_'); }
+        function getResRef(name) { return resVar ? resVar + '.' + sanitizeName(name) : null; }
 
-        function sanitizeName(name) {
-            return (name || 'node').replace(/[^a-zA-Z0-9_$]/g, '_');
-        }
-
-        function getResRef(name) {
-            if (!resVar) return null;
-            return resVar + '.' + sanitizeName(name);
-        }
-
-        // Determine if a node is a leaf (no children) — used for inline creation
-        function isLeaf(node) {
-            return !node.children || node.children.length === 0;
-        }
-
-        // Check if a node is a layout container (row/column)
-        function isLinearLayout(node) {
-            return node.layoutType === 'Linear';
-        }
-        function isRowLayout(node) {
-            return isLinearLayout(node) && (node.flexDirection === 'row' || node.flexDirection === 'row-reverse');
-        }
-        function isColumnLayout(node) {
-            return isLinearLayout(node) && (node.flexDirection === 'column' || node.flexDirection === 'column-reverse');
+        // ── Easing helper ──
+        function _getEasingCode(n) {
+            if (!n || n === 'linear') return null;
+            var m = {
+                'easeIn':'cc.easeIn(2)','easeOut':'cc.easeOut(2)','easeInOut':'cc.easeInOut(2)',
+                'easeInCubic':'cc.easeIn(3)','easeOutCubic':'cc.easeOut(3)','easeInOutCubic':'cc.easeInOut(3)',
+                'bounce':'cc.easeBounceOut()','elastic':'cc.easeElasticOut()',
+                'backIn':'cc.easeBackIn()','backOut':'cc.easeBackOut()'
+            };
+            return m[n] || null;
         }
 
-        // ── Build the node creation code ───────────────────────
-        function exportNode(node, parentVar, depth) {
-            var name = node.name || node._id || ('node_' + depth);
+        // ══════════════════════════════════════════════════════════
+        //  EXPORT NODE — uses COMPUTED positions (_x, _y, _width, _height)
+        //  These are already in bottom-left (Cocos) coordinate system.
+        //  Responsiveness is handled by setDesignResolutionSize().
+        // ══════════════════════════════════════════════════════════
+
+        function exportNode(node, parentVar) {
+            var name = node.name || node._id || 'node';
             var varName = sanitizeName(name);
             var type = node.type || '';
             var w = Math.round(node._width || 0);
@@ -1327,110 +1322,89 @@
 
             // ── Comment ──
             if (includeComments && node.name) {
-                var layoutLabel = '';
-                if (isRowLayout(node)) layoutLabel = ' (Row)';
-                else if (isColumnLayout(node)) layoutLabel = ' (Column)';
-                else if (node.layoutType === 'Grid') layoutLabel = ' (Grid)';
-                else if (node.layoutType === 'ScrollView') layoutLabel = ' (ScrollView)';
-                ln('// ── ' + name + layoutLabel + ' ──');
+                var lbl = '';
+                if (node.layoutType === 'Linear') {
+                    lbl = node.flexDirection === 'row' || node.flexDirection === 'row-reverse' ? ' (Row)' : ' (Column)';
+                }
+                ln('// ── ' + name + lbl + ' ──');
             }
 
-            // ── Create node ──
-            if (type === 'sprite' || type === 'imageView') {
-                var sprRes = getResRef(name);
-                if (sprRes) {
-                    ln('var ' + varName + ' = UIBuilder.sprite(' + sprRes + ');');
+            // ── Create node based on type ──
+            if ((type === 'sprite' || type === 'imageView') && node.scaleMode === 'FILL') {
+                // Background fill sprite
+                var bgRes = getResRef(name);
+                if (bgRes) {
+                    ln('var ' + varName + ' = UIBuilder.createBackground(' + parentVar + ', ' + bgRes + ');');
+                    ln(varName + '.setName("' + name + '");');
                 } else {
                     ln('var ' + varName + ' = new cc.Sprite();');
+                    ln(varName + '.setName("' + name + '");');
+                    if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
                 }
+            } else if (type === 'sprite' || type === 'imageView') {
+                var sprRes = getResRef(name);
+                ln('var ' + varName + ' = ' + (sprRes ? 'UIBuilder.sprite(' + sprRes + ')' : 'new cc.Sprite()') + ';');
             } else if (type === 'button') {
                 var btnRes = getResRef(name);
-                if (btnRes) {
-                    ln('var ' + varName + ' = UIBuilder.button(' + btnRes + ');');
-                } else {
-                    ln('var ' + varName + ' = new ccui.Button();');
-                }
+                ln('var ' + varName + ' = ' + (btnRes ? 'UIBuilder.button(' + btnRes + ')' : 'new ccui.Button()') + ';');
                 ln(varName + '.setPressedActionEnabled(true);');
-                if (node.title) {
-                    ln(varName + '.setTitleText("' + node.title.replace(/"/g, '\\"') + '");');
-                }
-                // Register for callback stub
+                if (node.title) ln(varName + '.setTitleText("' + node.title.replace(/"/g, '\\"') + '");');
                 refNodes.push(name);
             } else if (type === 'label' || type === 'text') {
                 var text = (node.text || 'Text').replace(/"/g, '\\"');
                 var fontSize = node.fontSize || node.titleFontSize || 20;
-                var fontName = node.fontName || 'Arial';
-                ln('var ' + varName + ' = new cc.LabelTTF("' + text + '", "' + fontName + '", ' + fontSize + ');');
-                if (node.color) {
-                    ln(varName + '.setColor(cc.color(' + (node.color.r||0) + ', ' + (node.color.g||0) + ', ' + (node.color.b||0) + '));');
-                }
+                ln('var ' + varName + ' = new cc.LabelTTF("' + text + '", "' + (node.fontName || 'Arial') + '", ' + fontSize + ');');
+                if (node.color) ln(varName + '.setColor(cc.color(' + (node.color.r||0) + ', ' + (node.color.g||0) + ', ' + (node.color.b||0) + '));');
             } else if (type === 'scale9') {
                 var s9Res = getResRef(name);
-                if (s9Res) {
-                    ln('var ' + varName + ' = new ccui.Scale9Sprite(' + s9Res + ');');
-                } else {
-                    ln('var ' + varName + ' = new ccui.Scale9Sprite();');
-                }
+                ln('var ' + varName + ' = new ccui.Scale9Sprite(' + (s9Res || '') + ');');
             } else if (type === 'progressBar') {
                 var pbRes = getResRef(name);
-                if (pbRes) {
-                    ln('var ' + varName + ' = UIBuilder.sprite(' + pbRes + ');');
-                } else {
-                    ln('var ' + varName + ' = new cc.Node();');
-                }
+                ln('var ' + varName + ' = ' + (pbRes ? 'UIBuilder.sprite(' + pbRes + ')' : 'new cc.Node()') + ';');
             } else {
-                // Container / layout node
                 ln('var ' + varName + ' = new cc.Node();');
             }
 
-            // ── Size ──
-            if (w > 0 && h > 0) {
-                ln(varName + '.setContentSize(' + w + ', ' + h + ');');
-            }
+            // ── Size & Position ──
+            // Skip for FILL backgrounds (createBackground handles this)
+            if (!((type === 'sprite' || type === 'imageView') && node.scaleMode === 'FILL')) {
+                if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
+                if (isRoot) {
+                    ln(varName + '.setPosition(0, 0);');
+                } else {
+                    ln(varName + '.setPosition(' + x + ', ' + y + ');');
+                }
 
-            // ── Position ──
-            if (isRoot) {
-                ln(varName + '.setPosition(0, 0);');
-            } else {
-                ln(varName + '.setPosition(' + x + ', ' + y + ');');
-            }
+                if (node.name) ln(varName + '.setName("' + name + '");');
 
-            // ── Anchor ──
-            if (anchor[0] !== 0.5 || anchor[1] !== 0.5) {
-                ln(varName + '.setAnchorPoint(' + anchor[0] + ', ' + anchor[1] + ');');
-            }
+                // Anchor — cc.Node defaults to (0,0), cc.Sprite/ccui.Button default to (0.5,0.5)
+                // Always emit for plain cc.Node containers to avoid mismatch
+                var isVisualType = (type === 'sprite' || type === 'button' || type === 'imageView'
+                    || type === 'scale9' || type === 'label' || type === 'text' || type === 'progressBar');
+                if (!isVisualType || anchor[0] !== 0.5 || anchor[1] !== 0.5) {
+                    ln(varName + '.setAnchorPoint(' + anchor[0] + ', ' + anchor[1] + ');');
+                }
 
-            // ── Name ──
-            if (node.name) {
-                ln(varName + '.setName("' + node.name + '");');
-            }
+                // Scale
+                var sx = node._scaleX !== undefined ? node._scaleX : 1;
+                var sy = node._scaleY !== undefined ? node._scaleY : 1;
+                if (sx !== 1 && sy !== 1 && sx === sy) {
+                    ln(varName + '.setScale(' + sx.toFixed(4) + ');');
+                } else {
+                    if (sx !== 1) ln(varName + '.setScaleX(' + sx.toFixed(4) + ');');
+                    if (sy !== 1) ln(varName + '.setScaleY(' + sy.toFixed(4) + ');');
+                }
 
-            // ── Visual properties ──
-            var sx = node._scaleX !== undefined ? node._scaleX : 1;
-            var sy = node._scaleY !== undefined ? node._scaleY : 1;
-            if (sx !== 1 && sy !== 1 && sx === sy) {
-                ln(varName + '.setScale(' + sx.toFixed(4) + ');');
-            } else {
-                if (sx !== 1) ln(varName + '.setScaleX(' + sx.toFixed(4) + ');');
-                if (sy !== 1) ln(varName + '.setScaleY(' + sy.toFixed(4) + ');');
-            }
+                // Visual properties
+                if (node.rotation) ln(varName + '.setRotation(' + node.rotation + ');');
+                if (node.opacity !== undefined && node.opacity !== 255) ln(varName + '.setOpacity(' + node.opacity + ');');
+                if (node.visible === false) ln(varName + '.setVisible(false);');
+                if (node.zOrder) ln(varName + '.setLocalZOrder(' + node.zOrder + ');');
 
-            if (node.rotation) {
-                ln(varName + '.setRotation(' + node.rotation + ');');
-            }
-            if (node.opacity !== undefined && node.opacity !== 255) {
-                ln(varName + '.setOpacity(' + node.opacity + ');');
-            }
-            if (node.visible === false) {
-                ln(varName + '.setVisible(false);');
-            }
-            if (node.zOrder) {
-                ln(varName + '.setLocalZOrder(' + node.zOrder + ');');
-            }
-
-            // ── Add to parent ──
-            if (parentVar) {
-                ln(parentVar + '.addChild(' + varName + ');');
+                // Add to parent
+                if (parentVar && !((type === 'sprite' || type === 'imageView') && node.scaleMode === 'FILL')) {
+                    ln(parentVar + '.addChild(' + varName + ');');
+                }
             }
 
             // ── Animations ──
@@ -1439,7 +1413,61 @@
                 if (includeComments) ln('// Animations for ' + name);
                 for (var a = 0; a < node._animations.length; a++) {
                     var anim = node._animations[a];
-                    exportAnimation(varName, anim, a, x, y);
+                    var actVar = varName + '_anim' + a;
+                    var dur = (anim.duration / 1000).toFixed(2);
+                    var toVal = anim.to;
+                    var isLoop = (anim.sequence === 'loop');
+                    var isPosP = (anim.prop === 'x' || anim.prop === 'y');
+
+                    // Set initial value
+                    if (anim.from !== undefined && !(isLoop && isPosP)) {
+                        switch (anim.prop) {
+                            case 'opacity': ln(varName + '.setOpacity(' + anim.from + ');'); break;
+                            case 'rotation': ln(varName + '.setRotation(' + anim.from + ');'); break;
+                            case 'scale': ln(varName + '.setScale(' + anim.from + ');'); break;
+                            case 'scaleX': ln(varName + '.setScaleX(' + anim.from + ');'); break;
+                            case 'scaleY': ln(varName + '.setScaleY(' + anim.from + ');'); break;
+                            case 'x': ln(varName + '.setPositionX(' + anim.from + ');'); break;
+                            case 'y': ln(varName + '.setPositionY(' + anim.from + ');'); break;
+                        }
+                    }
+
+                    // Create action
+                    if (anim.prop === 'opacity') ln('var ' + actVar + ' = cc.fadeTo(' + dur + ', ' + toVal + ');');
+                    else if (anim.prop === 'rotation') ln('var ' + actVar + ' = cc.rotateTo(' + dur + ', ' + toVal + ');');
+                    else if (anim.prop === 'scale') ln('var ' + actVar + ' = cc.scaleTo(' + dur + ', ' + toVal + ');');
+                    else if (anim.prop === 'scaleX') ln('var ' + actVar + ' = cc.scaleTo(' + dur + ', ' + toVal + ', ' + varName + '.getScaleY());');
+                    else if (anim.prop === 'scaleY') ln('var ' + actVar + ' = cc.scaleTo(' + dur + ', ' + varName + '.getScaleX(), ' + toVal + ');');
+                    else if (anim.prop === 'x') {
+                        if (isLoop) ln('var ' + actVar + ' = cc.moveBy(' + dur + ', ' + (toVal - (anim.from||0)) + ', 0);');
+                        else ln('var ' + actVar + ' = cc.moveTo(' + dur + ', ' + toVal + ', ' + varName + '.getPositionY());');
+                    } else if (anim.prop === 'y') {
+                        if (isLoop) ln('var ' + actVar + ' = cc.moveBy(' + dur + ', 0, ' + (toVal - (anim.from||0)) + ');');
+                        else ln('var ' + actVar + ' = cc.moveTo(' + dur + ', ' + varName + '.getPositionX(), ' + toVal + ');');
+                    } else continue;
+
+                    var ec = _getEasingCode(anim.easing);
+                    if (ec) ln(actVar + ' = ' + actVar + '.easing(' + ec + ');');
+
+                    if (anim.yoyo) {
+                        if (isLoop && isPosP) {
+                            ln(actVar + ' = cc.sequence(' + actVar + ', ' + actVar + '.reverse());');
+                        } else if (anim.from !== undefined) {
+                            var rv = actVar + '_rev';
+                            if (anim.prop === 'opacity') ln('var ' + rv + ' = cc.fadeTo(' + dur + ', ' + anim.from + ');');
+                            else if (anim.prop === 'rotation') ln('var ' + rv + ' = cc.rotateTo(' + dur + ', ' + anim.from + ');');
+                            else if (anim.prop === 'scale') ln('var ' + rv + ' = cc.scaleTo(' + dur + ', ' + anim.from + ');');
+                            else if (anim.prop === 'x') ln('var ' + rv + ' = cc.moveTo(' + dur + ', ' + anim.from + ', ' + varName + '.getPositionY());');
+                            else if (anim.prop === 'y') ln('var ' + rv + ' = cc.moveTo(' + dur + ', ' + varName + '.getPositionX(), ' + anim.from + ');');
+                            if (ec) ln(rv + ' = ' + rv + '.easing(' + ec + ');');
+                            ln(actVar + ' = cc.sequence(' + actVar + ', ' + rv + ');');
+                        }
+                    }
+
+                    if (anim.delay > 0) ln(actVar + ' = cc.sequence(cc.delayTime(' + (anim.delay/1000).toFixed(2) + '), ' + actVar + ');');
+                    if (anim.repeat === -1) ln(actVar + ' = cc.repeatForever(' + actVar + ');');
+                    else if (anim.repeat > 1) ln(actVar + ' = cc.repeat(' + actVar + ', ' + anim.repeat + ');');
+                    ln(varName + '.runAction(' + actVar + ');');
                 }
             }
 
@@ -1448,124 +1476,24 @@
             // ── Recurse children ──
             if (node.children) {
                 for (var c = 0; c < node.children.length; c++) {
-                    exportNode(node.children[c], varName, depth + 1);
+                    exportNode(node.children[c], varName);
                 }
             }
+
+            return varName;
         }
 
-        function exportAnimation(varName, anim, index, nodeX, nodeY) {
-            var actVar = varName + '_anim' + index;
-            var dur = (anim.duration / 1000).toFixed(2);
-            var toVal = anim.to;
-            var isLoop = (anim.sequence === 'loop');
-            var isPositionProp = (anim.prop === 'x' || anim.prop === 'y');
-
-            // Set initial value for intro (not loop position)
-            if (anim.from !== undefined && !(isLoop && isPositionProp)) {
-                switch (anim.prop) {
-                    case 'opacity': ln(varName + '.setOpacity(' + anim.from + ');'); break;
-                    case 'rotation': ln(varName + '.setRotation(' + anim.from + ');'); break;
-                    case 'scale': ln(varName + '.setScale(' + anim.from + ');'); break;
-                    case 'scaleX': ln(varName + '.setScaleX(' + anim.from + ');'); break;
-                    case 'scaleY': ln(varName + '.setScaleY(' + anim.from + ');'); break;
-                    case 'x': ln(varName + '.setPositionX(' + anim.from + ');'); break;
-                    case 'y': ln(varName + '.setPositionY(' + anim.from + ');'); break;
-                }
-            }
-
-            // Create action
-            if (anim.prop === 'opacity') {
-                ln('var ' + actVar + ' = cc.fadeTo(' + dur + ', ' + toVal + ');');
-            } else if (anim.prop === 'rotation') {
-                ln('var ' + actVar + ' = cc.rotateTo(' + dur + ', ' + toVal + ');');
-            } else if (anim.prop === 'scale') {
-                ln('var ' + actVar + ' = cc.scaleTo(' + dur + ', ' + toVal + ');');
-            } else if (anim.prop === 'scaleX') {
-                ln('var ' + actVar + ' = cc.scaleTo(' + dur + ', ' + toVal + ', ' + varName + '.getScaleY());');
-            } else if (anim.prop === 'scaleY') {
-                ln('var ' + actVar + ' = cc.scaleTo(' + dur + ', ' + varName + '.getScaleX(), ' + toVal + ');');
-            } else if (anim.prop === 'x') {
-                if (isLoop) {
-                    ln('var ' + actVar + ' = cc.moveBy(' + dur + ', ' + (toVal - (anim.from || 0)) + ', 0);');
-                } else {
-                    ln('var ' + actVar + ' = cc.moveTo(' + dur + ', ' + toVal + ', ' + varName + '.getPositionY());');
-                }
-            } else if (anim.prop === 'y') {
-                if (isLoop) {
-                    ln('var ' + actVar + ' = cc.moveBy(' + dur + ', 0, ' + (toVal - (anim.from || 0)) + ');');
-                } else {
-                    ln('var ' + actVar + ' = cc.moveTo(' + dur + ', ' + varName + '.getPositionX(), ' + toVal + ');');
-                }
-            } else {
-                return; // Unknown prop
-            }
-
-            // Apply easing
-            var easingCode = getEasingCode(anim.easing);
-            if (easingCode) {
-                ln(actVar + ' = ' + actVar + '.easing(' + easingCode + ');');
-            }
-
-            // Yoyo
-            if (anim.yoyo) {
-                if (isLoop && isPositionProp) {
-                    ln(actVar + ' = cc.sequence(' + actVar + ', ' + actVar + '.reverse());');
-                } else if (anim.from !== undefined) {
-                    var revActVar = actVar + '_rev';
-                    // Create reverse action
-                    if (anim.prop === 'opacity') ln('var ' + revActVar + ' = cc.fadeTo(' + dur + ', ' + anim.from + ');');
-                    else if (anim.prop === 'rotation') ln('var ' + revActVar + ' = cc.rotateTo(' + dur + ', ' + anim.from + ');');
-                    else if (anim.prop === 'scale') ln('var ' + revActVar + ' = cc.scaleTo(' + dur + ', ' + anim.from + ');');
-                    else if (anim.prop === 'x') ln('var ' + revActVar + ' = cc.moveTo(' + dur + ', ' + anim.from + ', ' + varName + '.getPositionY());');
-                    else if (anim.prop === 'y') ln('var ' + revActVar + ' = cc.moveTo(' + dur + ', ' + varName + '.getPositionX(), ' + anim.from + ');');
-
-                    if (easingCode) {
-                        ln(revActVar + ' = ' + revActVar + '.easing(' + easingCode + ');');
-                    }
-                    ln(actVar + ' = cc.sequence(' + actVar + ', ' + revActVar + ');');
-                }
-            }
-
-            // Delay
-            if (anim.delay > 0) {
-                ln(actVar + ' = cc.sequence(cc.delayTime(' + (anim.delay / 1000).toFixed(2) + '), ' + actVar + ');');
-            }
-
-            // Repeat
-            if (anim.repeat === -1) {
-                ln(actVar + ' = cc.repeatForever(' + actVar + ');');
-            } else if (anim.repeat > 1) {
-                ln(actVar + ' = cc.repeat(' + actVar + ', ' + anim.repeat + ');');
-            }
-
-            ln(varName + '.runAction(' + actVar + ');');
-        }
-
-        function getEasingCode(easingName) {
-            if (!easingName || easingName === 'linear') return null;
-            var map = {
-                'easeIn': 'cc.easeIn(2)',
-                'easeOut': 'cc.easeOut(2)',
-                'easeInOut': 'cc.easeInOut(2)',
-                'easeInCubic': 'cc.easeIn(3)',
-                'easeOutCubic': 'cc.easeOut(3)',
-                'easeInOutCubic': 'cc.easeInOut(3)',
-                'bounce': 'cc.easeBounceOut()',
-                'elastic': 'cc.easeElasticOut()',
-                'backIn': 'cc.easeBackIn()',
-                'backOut': 'cc.easeBackOut()'
-            };
-            return map[easingName] || null;
-        }
-
-        // ── Generate output ───────────────────────────────────
+        // ══════════════════════════════════════════════════════════
+        //  GENERATE OUTPUT
+        // ══════════════════════════════════════════════════════════
 
         if (wrapInLayer) {
             ln('/**');
             ln(' * ' + layerName + ' — Auto-generated from layout JSON');
             ln(' * Design: ' + (this._screenWidth || 0) + 'x' + (this._screenHeight || 0));
             ln(' *');
-            ln(' * Generated by LayoutEngine.exportUIBuilderCode()');
+            ln(' * Uses setDesignResolutionSize() for screen adaptation.');
+            ln(' * Positions are pre-computed by LayoutEngine.');
             ln(' */');
             blank();
             ln('var ' + layerName + ' = cc.Layer.extend({');
@@ -1591,23 +1519,22 @@
             }
         }
 
-        // Export all nodes from root
+        // Export all nodes
         if (this._root) {
-            exportNode(this._root, null, 0);
+            exportNode(this._root, null);
 
-            // Add root to layer
+            // Root is added to this layer
             if (wrapInLayer) {
                 var rootVar = sanitizeName(this._root.name || this._root._id || 'root');
                 ln('this.addChild(' + rootVar + ');');
                 blank();
 
                 // Store node references
-                if (includeComments) ln('// Store node references for post-build access');
+                if (includeComments) ln('// Store node references');
                 ln('this._nodes = {');
                 indent = tab + tab + tab;
                 for (var nr = 0; nr < nodeRefs.length; nr++) {
-                    var comma = (nr < nodeRefs.length - 1) ? ',' : '';
-                    ln(nodeRefs[nr] + ': ' + nodeRefs[nr] + comma);
+                    ln(nodeRefs[nr] + ': ' + nodeRefs[nr] + (nr < nodeRefs.length - 1 ? ',' : ''));
                 }
                 indent = tab + tab;
                 ln('};');
@@ -1619,24 +1546,17 @@
             blank();
             if (includeComments) ln('// Button callbacks');
             for (var b = 0; b < refNodes.length; b++) {
-                var btnName = refNodes[b];
-                var btnVar = sanitizeName(btnName);
-                ln(btnVar + '.addClickEventListener(function () {');
+                var bn = refNodes[b];
+                var bv = sanitizeName(bn);
+                ln(bv + '.addClickEventListener(function () {');
                 indent = tab + tab + tab;
-                ln('self._on' + btnName.charAt(0).toUpperCase() + btnName.slice(1) + '();');
+                ln('self._on' + bn.charAt(0).toUpperCase() + bn.slice(1) + '();');
                 indent = tab + tab;
                 ln('});');
             }
         }
 
-        // Layer entrance
         if (wrapInLayer) {
-            blank();
-            if (includeComments) ln('// Layer entrance');
-            ln('this.setOpacity(0);');
-            ln('this.setCascadeOpacityEnabled(true);');
-            ln('UIBuilder.fadeIn(this, 0.4);');
-
             indent = tab;
             ln('},');
 
@@ -1645,15 +1565,15 @@
                 blank();
                 if (includeComments) ln('// ── Callbacks ──');
                 for (var cb = 0; cb < refNodes.length; cb++) {
-                    var cbName = refNodes[cb];
-                    var methodName = '_on' + cbName.charAt(0).toUpperCase() + cbName.slice(1);
-                    var isLast = (cb === refNodes.length - 1);
-                    ln(methodName + ': function () {');
+                    var cbN = refNodes[cb];
+                    var mN = '_on' + cbN.charAt(0).toUpperCase() + cbN.slice(1);
+                    var last = (cb === refNodes.length - 1);
+                    ln(mN + ': function () {');
                     indent = tab + tab;
-                    ln('cc.log("' + cbName + ' clicked");');
+                    ln('cc.log("' + cbN + ' clicked");');
                     indent = tab;
-                    ln('}' + (isLast ? '' : ','));
-                    if (!isLast) blank();
+                    ln('}' + (last ? '' : ','));
+                    if (!last) blank();
                 }
             }
 
@@ -1681,34 +1601,21 @@
 
     /**
      * Live-edit: set a property on a node and re-compute layout.
-     * @param {string} id - Node id
-     * @param {string} prop - Property name (x, y, width, height, opacity, rotation, visible, etc.)
-     * @param {*} value - New value
-     * @returns {Object} { ok: boolean, bounds: getNodeBounds result }
      */
     LayoutEngine.prototype.setNodeProp = function(id, prop, value) {
         var node = this._nodeMap[id] || this._nodeMap[String(id)];
         if (!node) return { ok: false, error: 'Node not found: ' + id };
-
-        // Set the property
         node[prop] = value;
-
-        // Properties that require re-layout
         var layoutProps = ['width', 'height', 'w', 'h', 'left', 'right', 'top', 'bottom',
             'percentWidth', 'percentHeight', 'flex', 'gap', 'padding', 'margin',
             'horizontalCenter', 'verticalCenter', 'percentX', 'percentY',
             'visible', 'layoutType', 'flexDirection', 'alignItems', 'justifyContent'];
-
         var needsRelayout = layoutProps.indexOf(prop) !== -1;
-
         if (needsRelayout && this._screenWidth) {
-            // Sync w/h aliases
             if (prop === 'w') node.width = value;
             if (prop === 'h') node.height = value;
-            // Re-compute full layout
             this.computeLayout(this._screenWidth, this._screenHeight, this._safeAreaInsets);
         } else {
-            // Visual-only change, just update resolved props
             if (prop === 'rotation') node._rotation = value;
             if (prop === 'opacity') node._opacity = value;
             if (prop === 'visible') node._visible = value;
@@ -1716,52 +1623,31 @@
             if (prop === 'scaleX') node._scaleX = value;
             if (prop === 'scaleY') node._scaleY = value;
         }
-
         return { ok: true, bounds: this.getNodeBounds(id) };
     };
 
-    /**
-     * Get a diff between two layout states.
-     * @param {Object} prevBoundsMap - { nodeId: { x, y, width, height, ... } }
-     * @returns {Array} [{ nodeId, prop, oldValue, newValue }]
-     */
     LayoutEngine.prototype.diffLayout = function(prevBoundsMap) {
         var diffs = [];
         var compareProps = ['x', 'y', 'width', 'height', 'absX', 'absY', 'scaleX', 'scaleY', 'rotation', 'opacity', 'visible'];
-
         for (var id in this._nodeMap) {
             var current = this.getNodeBounds(id);
             var prev = prevBoundsMap[id];
             if (!current || !prev) continue;
-
             for (var p = 0; p < compareProps.length; p++) {
                 var prop = compareProps[p];
-                var oldVal = prev[prop];
-                var newVal = current[prop];
-                if (oldVal !== newVal) {
-                    diffs.push({ nodeId: id, prop: prop, oldValue: oldVal, newValue: newVal });
-                }
+                if (prev[prop] !== current[prop]) diffs.push({ nodeId: id, prop: prop, oldValue: prev[prop], newValue: current[prop] });
             }
         }
         return diffs;
     };
 
-    /**
-     * Snapshot all current bounds for later diffing.
-     * @returns {Object} { nodeId: boundsObject }
-     */
     LayoutEngine.prototype.snapshotBounds = function() {
         var snapshot = {};
-        for (var id in this._nodeMap) {
-            snapshot[id] = this.getNodeBounds(id);
-        }
+        for (var id in this._nodeMap) snapshot[id] = this.getNodeBounds(id);
         return snapshot;
     };
 
-    // Module Exports
     global.LayoutEngine = LayoutEngine;
-    if (typeof module !== 'undefined' && module.exports) {
-        module.exports = LayoutEngine;
-    }
+    if (typeof module !== 'undefined' && module.exports) module.exports = LayoutEngine;
 
 })(typeof window !== 'undefined' ? window : this);

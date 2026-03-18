@@ -84,6 +84,26 @@ var UIBuilder = {
     },
 
     /**
+     * Shorthand: create a bare cc.Sprite (not added to any parent).
+     * Used by generated code from json2code / exportUIBuilderCode.
+     * @param {string} file - Path to image
+     * @returns {cc.Sprite}
+     */
+    sprite: function (file) {
+        return new cc.Sprite(file);
+    },
+
+    /**
+     * Shorthand: create a bare ccui.Button (not added to any parent).
+     * Used by generated code from json2code / exportUIBuilderCode.
+     * @param {string} normalImg - Path to normal state image
+     * @returns {ccui.Button}
+     */
+    button: function (normalImg) {
+        return new ccui.Button(normalImg);
+    },
+
+    /**
      * Reference to the shared LayoutEngine constructor.
      * Usage: var engine = new UIBuilder.LayoutEngine();
      *        engine.buildTree(jsonData);
