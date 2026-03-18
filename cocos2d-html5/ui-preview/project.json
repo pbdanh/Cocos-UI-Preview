@@ -1,0 +1,43 @@
+{
+    "debugMode" : 1,
+    "noCache": true,
+    "showFPS" : true,
+    "frameRate" : 60,
+    "id" : "gameCanvas",
+    "renderMode" : 0,
+    "engineDir":"../",
+
+    "modules" : ["cocos2d", "ccui", "cocostudio"],
+
+    "jsList" : [
+        "src/ui-builder/_layout_engine.js",
+        "src/ui-builder/_base.js",
+        "src/ui-builder/_display.js",
+        "src/ui-builder/_text.js",
+        "src/ui-builder/_button.js",
+        "src/ui-builder/_input.js",
+        "src/ui-builder/_progress.js",
+        "src/ui-builder/_layout.js",
+        "src/ui-builder/_shapes.js",
+        "src/ui-builder/_animation.js",
+        "src/ui-builder/_position.js",
+        "src/ui-builder/_scene.js",
+        "src/ui-builder/_events.js",
+        "src/ui-builder/_audio.js",
+        "src/ui-builder/_particles.js",
+        "src/ui-builder/_high-level.js",
+        "src/resource.js",
+        "src/PreviewLayer.js",
+        "src/dev-bridge/_bootstrap.js",
+        "src/dev-bridge/_utils.js",
+        "src/dev-bridge/_styles.js",
+        "src/dev-bridge/_panel.js",
+        "src/dev-bridge/_overlay.js",
+        "src/dev-bridge/_tree.js",
+        "src/dev-bridge/_text-tree.js",
+        "src/dev-bridge/_inspector.js",
+        "src/dev-bridge/_executor.js",
+        "src/dev-bridge/_node-click.js",
+        "src/dev-bridge/_init.js"
+    ]
+}
