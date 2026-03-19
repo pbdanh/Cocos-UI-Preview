@@ -1330,11 +1330,11 @@ LayoutEngine.prototype.exportUIBuilderCode = function(options) {
             }
 
             // ── Create node based on type ──
-            if ((type === 'sprite' || type === 'imageView') && node.scaleMode === 'FILL') {
-                // Background fill sprite
+            if ((type === 'sprite' || type === 'imageView') && (node.scaleMode === 'FILL' || node.scaleMode === 'FIT' || node.scaleMode === 'STRETCH')) {
+                // Background fill/fit sprite
                 var bgRes = getResRef(name);
                 if (bgRes) {
-                    ln('var ' + varName + ' = UIBuilder.createBackground(' + parentVar + ', ' + bgRes + ');');
+                    ln('var ' + varName + ' = UIBuilder.createBackground(' + parentVar + ', ' + bgRes + ', "' + node.scaleMode + '");');
                     ln(varName + '.setName("' + name + '");');
                 } else {
                     ln('var ' + varName + ' = new cc.Sprite();');
@@ -1366,8 +1366,8 @@ LayoutEngine.prototype.exportUIBuilderCode = function(options) {
             }
 
             // ── Size & Position ──
-            // Skip for FILL backgrounds (createBackground handles this)
-            if (!((type === 'sprite' || type === 'imageView') && node.scaleMode === 'FILL')) {
+            // Skip for FILL/FIT backgrounds (createBackground handles this)
+            if (!((type === 'sprite' || type === 'imageView') && (node.scaleMode === 'FILL' || node.scaleMode === 'FIT' || node.scaleMode === 'STRETCH'))) {
                 if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
                 if (isRoot) {
                     ln(varName + '.setPosition(0, 0);');
@@ -1402,7 +1402,7 @@ LayoutEngine.prototype.exportUIBuilderCode = function(options) {
                 if (node.zOrder) ln(varName + '.setLocalZOrder(' + node.zOrder + ');');
 
                 // Add to parent
-                if (parentVar && !((type === 'sprite' || type === 'imageView') && node.scaleMode === 'FILL')) {
+                if (parentVar && !((type === 'sprite' || type === 'imageView') && (node.scaleMode === 'FILL' || node.scaleMode === 'FIT' || node.scaleMode === 'STRETCH'))) {
                     ln(parentVar + '.addChild(' + varName + ');');
                 }
             }
@@ -1710,11 +1710,11 @@ LayoutEngine.prototype.exportUIBuilderCode = function(options) {
             //  CREATE NODE
             // ══════════════════════════════════════════════════════
 
-            if ((type === 'sprite' || type === 'imageView') && node.scaleMode === 'FILL') {
-                // Background fill sprite
+            if ((type === 'sprite' || type === 'imageView') && (node.scaleMode === 'FILL' || node.scaleMode === 'FIT' || node.scaleMode === 'STRETCH')) {
+                // Background fill/fit sprite
                 var bgRes = getResRef(name);
                 if (bgRes) {
-                    ln('var ' + varName + ' = UIBuilder.createBackground(' + parentVar + ', ' + bgRes + ');');
+                    ln('var ' + varName + ' = UIBuilder.createBackground(' + parentVar + ', ' + bgRes + ', "' + node.scaleMode + '");');
                     ln(varName + '.setName("' + name + '");');
                 } else {
                     ln('var ' + varName + ' = new cc.Sprite();');
