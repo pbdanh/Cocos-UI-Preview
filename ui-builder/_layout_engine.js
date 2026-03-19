@@ -120,9 +120,9 @@
         this._root.height = this._screenHeight;
         this._root._absX = 0;
         this._root._absY = 0;
-        this._root._x = screenWidth / 2;
-        this._root._y = screenHeight / 2;
         this._root.anchor = [0, 0]; // Screen coordinates start from [0, 0] for root
+        this._root._x = 0;         // With anchor (0,0), position = bottom-left corner
+        this._root._y = 0;
 
         // Pass 1: Measure
         this._measureNode(this._root, screenWidth, screenHeight);
@@ -1330,11 +1330,11 @@ LayoutEngine.prototype.exportUIBuilderCode = function(options) {
             }
 
             // ── Create node based on type ──
-            if ((type === 'sprite' || type === 'imageView') && node.scaleMode === 'FILL') {
-                // Background fill sprite
+            if ((type === 'sprite' || type === 'imageView') && (node.scaleMode === 'FILL' || node.scaleMode === 'FIT' || node.scaleMode === 'STRETCH')) {
+                // Background fill/fit sprite
                 var bgRes = getResRef(name);
                 if (bgRes) {
-                    ln('var ' + varName + ' = UIBuilder.createBackground(' + parentVar + ', ' + bgRes + ');');
+                    ln('var ' + varName + ' = UIBuilder.createBackground(' + parentVar + ', ' + bgRes + ', "' + node.scaleMode + '");');
                     ln(varName + '.setName("' + name + '");');
                 } else {
                     ln('var ' + varName + ' = new cc.Sprite();');
@@ -1366,8 +1366,8 @@ LayoutEngine.prototype.exportUIBuilderCode = function(options) {
             }
 
             // ── Size & Position ──
-            // Skip for FILL backgrounds (createBackground handles this)
-            if (!((type === 'sprite' || type === 'imageView') && node.scaleMode === 'FILL')) {
+            // Skip for FILL/FIT backgrounds (createBackground handles this)
+            if (!((type === 'sprite' || type === 'imageView') && (node.scaleMode === 'FILL' || node.scaleMode === 'FIT' || node.scaleMode === 'STRETCH'))) {
                 if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
                 if (isRoot) {
                     ln(varName + '.setPosition(0, 0);');
@@ -1402,7 +1402,7 @@ LayoutEngine.prototype.exportUIBuilderCode = function(options) {
                 if (node.zOrder) ln(varName + '.setLocalZOrder(' + node.zOrder + ');');
 
                 // Add to parent
-                if (parentVar && !((type === 'sprite' || type === 'imageView') && node.scaleMode === 'FILL')) {
+                if (parentVar && !((type === 'sprite' || type === 'imageView') && (node.scaleMode === 'FILL' || node.scaleMode === 'FIT' || node.scaleMode === 'STRETCH'))) {
                     ln(parentVar + '.addChild(' + varName + ');');
                 }
             }
@@ -1595,6 +1595,730 @@ LayoutEngine.prototype.exportUIBuilderCode = function(options) {
             indent = '';
             ln('});');
         }
+
+        return lines.join('\n');
+    };
+
+    /**
+     * Export ADAPTIVE UIBuilder code that uses UIBuilder.arrangeAsRow/Column
+     * for responsive layout without runtime LayoutEngine.
+     *
+     * Produces code using:
+     *  - cc.Node / ccui.Layout (ABSOLUTE only) for containers
+     *  - UIBuilder.pinEdges() for constraints
+     *  - UIBuilder.arrangeAsRow/Column() for row/column layout (gap, alignItems, justifyContent)
+     *  - UIBuilder.createBackground() for scaleMode: "FILL"
+     *  - setBackGroundImage() for hybrid container+visual nodes
+     */
+    LayoutEngine.prototype.exportAdaptiveCode = function(options) {
+        options = options || {};
+        var resVar = options.resourceMapVar || '';
+        var layerName = options.layerName || 'GeneratedLayer';
+        var tab = options.indent || '    ';
+        var includeAnims = options.includeAnimations !== false;
+        var includeComments = options.includeComments !== false;
+        var wrapInLayer = options.wrapInLayer !== false;
+
+        var srcTree = this._root;
+        if (!srcTree) return '';
+
+        var lines = [];
+        var indent = '';
+        var refNodes = [];
+        var nodeRefs = [];
+
+        function ln(s) { lines.push(indent + (s || '')); }
+        function blank() { lines.push(''); }
+        function sanitizeName(name) { return (name || 'node').replace(/[^a-zA-Z0-9_$]/g, '_'); }
+        function getResRef(name) { return resVar ? resVar + '.' + sanitizeName(name) : null; }
+
+        function _getEasingCode(n) {
+            if (!n || n === 'linear') return null;
+            var m = {
+                'easeIn':'cc.easeIn(2)','easeOut':'cc.easeOut(2)','easeInOut':'cc.easeInOut(2)',
+                'easeInCubic':'cc.easeIn(3)','easeOutCubic':'cc.easeOut(3)','easeInOutCubic':'cc.easeInOut(3)',
+                'bounce':'cc.easeBounceOut()','elastic':'cc.easeElasticOut()',
+                'backIn':'cc.easeBackIn()','backOut':'cc.easeBackOut()'
+            };
+            return m[n] || null;
+        }
+
+        // Check if node has pinEdges constraints
+        function hasPinEdges(node) {
+            return node.left !== undefined || node.right !== undefined ||
+                   node.top !== undefined || node.bottom !== undefined ||
+                   node.horizontalCenter !== undefined || node.verticalCenter !== undefined;
+        }
+
+        // Emit pinEdges call
+        function emitPinEdges(varName, node) {
+            var edges = [];
+            if (node.left !== undefined) edges.push('left: ' + node.left);
+            if (node.right !== undefined) edges.push('right: ' + node.right);
+            if (node.top !== undefined) edges.push('top: ' + node.top);
+            if (node.bottom !== undefined) edges.push('bottom: ' + node.bottom);
+            if (node.horizontalCenter !== undefined) edges.push('horizontalCenter: true');
+            if (node.verticalCenter !== undefined) edges.push('verticalCenter: true');
+            if (edges.length > 0) {
+                ln('UIBuilder.pinEdges(' + varName + ', { ' + edges.join(', ') + ' });');
+            }
+        }
+
+        // Emit arrangeAsRow / arrangeAsColumn call for Linear containers
+        function emitArrangeCall(varName, node) {
+            if (node.layoutType !== 'Linear') return;
+            var isRow = (node.flexDirection === 'row' || node.flexDirection === 'row-reverse');
+            var method = isRow ? 'UIBuilder.arrangeAsRow' : 'UIBuilder.arrangeAsColumn';
+            var opts = [];
+            if (node.gap) opts.push('gap: ' + node.gap);
+            if (node.alignItems) opts.push('alignItems: "' + node.alignItems + '"');
+            if (node.justifyContent) opts.push('justifyContent: "' + node.justifyContent + '"');
+            ln(method + '(' + varName + ', { ' + opts.join(', ') + ' });');
+        }
+
+        // ══════════════════════════════════════════════════════════
+        //  EXPORT NODE
+        // ══════════════════════════════════════════════════════════
+
+        function exportNode(node, parentVar) {
+            var name = node.name || node._id || 'node';
+            var varName = sanitizeName(name);
+            var type = node.type || '';
+            var w = Math.round(node.w || node.width || node._width || 0);
+            var h = Math.round(node.h || node.height || node._height || 0);
+            var anchor = node.anchor || null;
+            var isRoot = !parentVar;
+
+            var isVisualType = (type === 'sprite' || type === 'button' || type === 'imageView'
+                || type === 'scale9' || type === 'label' || type === 'text' || type === 'progressBar');
+            var hasChildren = node.children && node.children.length > 0;
+            var isContainer = !!node.layoutType && (!isVisualType || hasChildren);
+            var isLinear = node.layoutType === 'Linear';
+
+            nodeRefs.push(varName);
+
+            // ── Comment ──
+            if (includeComments && node.name) {
+                var lbl = '';
+                if (isLinear) {
+                    lbl = (node.flexDirection === 'row' || node.flexDirection === 'row-reverse') ? ' (Row)' : ' (Column)';
+                }
+                ln('// ── ' + name + lbl + ' ──');
+            }
+
+            // ══════════════════════════════════════════════════════
+            //  CREATE NODE
+            // ══════════════════════════════════════════════════════
+
+            if ((type === 'sprite' || type === 'imageView') && (node.scaleMode === 'FILL' || node.scaleMode === 'FIT' || node.scaleMode === 'STRETCH')) {
+                // Background fill/fit sprite
+                var bgRes = getResRef(name);
+                if (bgRes) {
+                    ln('var ' + varName + ' = UIBuilder.createBackground(' + parentVar + ', ' + bgRes + ', "' + node.scaleMode + '");');
+                    ln(varName + '.setName("' + name + '");');
+                } else {
+                    ln('var ' + varName + ' = new cc.Sprite();');
+                    ln(varName + '.setName("' + name + '");');
+                    if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
+                }
+            } else if (isContainer && !isRoot) {
+                // Container node — use cc.Node (all positioning via arrangeAsRow/Column + pinEdges)
+                var containerRes = getResRef(name);
+                var hasVisualBg = isVisualType && (type === 'sprite' || type === 'imageView' || type === 'scale9');
+                if (hasVisualBg && containerRes) {
+                    // Hybrid: container with visual background → ccui.Layout + setBackGroundImage
+                    ln('var ' + varName + ' = new ccui.Layout();');
+                    ln(varName + '.setBackGroundImage(' + containerRes + ');');
+                    if (type === 'scale9') {
+                        ln(varName + '.setBackGroundImageScale9Enabled(true);');
+                    }
+                } else {
+                    ln('var ' + varName + ' = new cc.Node();');
+                }
+                if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
+                ln(varName + '.setName("' + name + '");');
+                if (anchor) ln(varName + '.setAnchorPoint(' + anchor[0] + ', ' + anchor[1] + ');');
+                if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
+                if (hasPinEdges(node)) emitPinEdges(varName, node);
+            } else if (isRoot) {
+                ln('var ' + varName + ' = UIBuilder.createFullScreenLayout(this);');
+                ln(varName + '.setName("' + name + '");');
+            } else if (type === 'sprite' || type === 'imageView') {
+                var sprRes = getResRef(name);
+                ln('var ' + varName + ' = ' + (sprRes ? 'UIBuilder.sprite(' + sprRes + ')' : 'new cc.Sprite()') + ';');
+                if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
+                ln(varName + '.setName("' + name + '");');
+                if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
+                if (hasPinEdges(node)) emitPinEdges(varName, node);
+            } else if (type === 'button') {
+                var btnRes = getResRef(name);
+                ln('var ' + varName + ' = ' + (btnRes ? 'UIBuilder.button(' + btnRes + ')' : 'new ccui.Button()') + ';');
+                ln(varName + '.setPressedActionEnabled(true);');
+                if (node.title) ln(varName + '.setTitleText("' + node.title.replace(/"/g, '\\"') + '");');
+                if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
+                ln(varName + '.setName("' + name + '");');
+                refNodes.push(name);
+                if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
+                if (hasPinEdges(node)) emitPinEdges(varName, node);
+            } else if (type === 'label' || type === 'text') {
+                var text = (node.text || 'Text').replace(/"/g, '\\"');
+                var fontSize = node.fontSize || node.titleFontSize || 20;
+                ln('var ' + varName + ' = new cc.LabelTTF("' + text + '", "' + (node.fontName || 'Arial') + '", ' + fontSize + ');');
+                if (node.color) ln(varName + '.setColor(cc.color(' + (node.color.r||0) + ', ' + (node.color.g||0) + ', ' + (node.color.b||0) + '));');
+                ln(varName + '.setName("' + name + '");');
+                if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
+                if (hasPinEdges(node)) emitPinEdges(varName, node);
+            } else if (type === 'scale9') {
+                var s9Res = getResRef(name);
+                ln('var ' + varName + ' = new ccui.Scale9Sprite(' + (s9Res || '') + ');');
+                if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
+                ln(varName + '.setName("' + name + '");');
+                if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
+                if (hasPinEdges(node)) emitPinEdges(varName, node);
+            } else if (type === 'progressBar') {
+                var pbRes = getResRef(name);
+                ln('var ' + varName + ' = ' + (pbRes ? 'UIBuilder.sprite(' + pbRes + ')' : 'new cc.Node()') + ';');
+                if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
+                ln(varName + '.setName("' + name + '");');
+                if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
+                if (hasPinEdges(node)) emitPinEdges(varName, node);
+            } else {
+                ln('var ' + varName + ' = new cc.Node();');
+                if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
+                ln(varName + '.setName("' + name + '");');
+                if (anchor) ln(varName + '.setAnchorPoint(' + anchor[0] + ', ' + anchor[1] + ');');
+                if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
+                if (hasPinEdges(node)) emitPinEdges(varName, node);
+            }
+
+            // ── Visual properties ──
+            if (node.rotation) ln(varName + '.setRotation(' + node.rotation + ');');
+            if (node.opacity !== undefined && node.opacity !== 255) ln(varName + '.setOpacity(' + node.opacity + ');');
+            if (node.visible === false) ln(varName + '.setVisible(false);');
+            if (node.zOrder) ln(varName + '.setLocalZOrder(' + node.zOrder + ');');
+
+            // ── Animations ──
+            if (includeAnims && node._animations && node._animations.length > 0) {
+                blank();
+                if (includeComments) ln('// Animations for ' + name);
+                for (var a = 0; a < node._animations.length; a++) {
+                    var anim = node._animations[a];
+                    var actVar = varName + '_anim' + a;
+                    var dur = (anim.duration / 1000).toFixed(2);
+                    var toVal = anim.to;
+                    var isLoop = (anim.sequence === 'loop');
+                    var isPosP = (anim.prop === 'x' || anim.prop === 'y');
+
+                    if (anim.from !== undefined && !(isLoop && isPosP)) {
+                        switch (anim.prop) {
+                            case 'opacity': ln(varName + '.setOpacity(' + anim.from + ');'); break;
+                            case 'rotation': ln(varName + '.setRotation(' + anim.from + ');'); break;
+                            case 'scale': ln(varName + '.setScale(' + anim.from + ');'); break;
+                            case 'scaleX': ln(varName + '.setScaleX(' + anim.from + ');'); break;
+                            case 'scaleY': ln(varName + '.setScaleY(' + anim.from + ');'); break;
+                        }
+                    }
+
+                    if (anim.prop === 'opacity') ln('var ' + actVar + ' = cc.fadeTo(' + dur + ', ' + toVal + ');');
+                    else if (anim.prop === 'rotation') ln('var ' + actVar + ' = cc.rotateTo(' + dur + ', ' + toVal + ');');
+                    else if (anim.prop === 'scale') ln('var ' + actVar + ' = cc.scaleTo(' + dur + ', ' + toVal + ');');
+                    else if (anim.prop === 'scaleX') ln('var ' + actVar + ' = cc.scaleTo(' + dur + ', ' + toVal + ', ' + varName + '.getScaleY());');
+                    else if (anim.prop === 'scaleY') ln('var ' + actVar + ' = cc.scaleTo(' + dur + ', ' + varName + '.getScaleX(), ' + toVal + ');');
+                    else continue;
+
+                    var ec = _getEasingCode(anim.easing);
+                    if (ec) ln(actVar + ' = ' + actVar + '.easing(' + ec + ');');
+
+                    if (anim.yoyo && anim.from !== undefined) {
+                        var rv = actVar + '_rev';
+                        if (anim.prop === 'opacity') ln('var ' + rv + ' = cc.fadeTo(' + dur + ', ' + anim.from + ');');
+                        else if (anim.prop === 'rotation') ln('var ' + rv + ' = cc.rotateTo(' + dur + ', ' + anim.from + ');');
+                        else if (anim.prop === 'scale') ln('var ' + rv + ' = cc.scaleTo(' + dur + ', ' + anim.from + ');');
+                        if (ec) ln(rv + ' = ' + rv + '.easing(' + ec + ');');
+                        ln(actVar + ' = cc.sequence(' + actVar + ', ' + rv + ');');
+                    }
+
+                    if (anim.delay > 0) ln(actVar + ' = cc.sequence(cc.delayTime(' + (anim.delay/1000).toFixed(2) + '), ' + actVar + ');');
+                    if (anim.repeat === -1) ln(actVar + ' = cc.repeatForever(' + actVar + ');');
+                    else if (anim.repeat > 1) ln(actVar + ' = cc.repeat(' + actVar + ', ' + anim.repeat + ');');
+                    ln(varName + '.runAction(' + actVar + ');');
+                }
+            }
+
+            blank();
+
+            // ── Recurse children ──
+            if (node.children) {
+                for (var c = 0; c < node.children.length; c++) {
+                    exportNode(node.children[c], varName);
+                }
+            }
+
+            // ── After all children: emit arrange call for Linear containers ──
+            if (isLinear && hasChildren) {
+                emitArrangeCall(varName, node);
+                blank();
+            }
+
+            return varName;
+        }
+
+        // ══════════════════════════════════════════════════════════
+        //  GENERATE OUTPUT
+        // ══════════════════════════════════════════════════════════
+
+        if (wrapInLayer) {
+            ln('/**');
+            ln(' * ' + layerName + ' — Auto-generated adaptive layout');
+            ln(' * Design: ' + (this._screenWidth || 0) + 'x' + (this._screenHeight || 0));
+            ln(' *');
+            ln(' * Uses UIBuilder.arrangeAsRow/Column + pinEdges for responsive layout.');
+            ln(' * No runtime LayoutEngine required.');
+            ln(' */');
+            blank();
+            ln('var ' + layerName + ' = cc.Layer.extend({');
+            blank();
+            indent = tab;
+            ln('ctor: function () {');
+            indent = tab + tab;
+            ln('this._super();');
+            ln('this._buildUI();');
+            ln('return true;');
+            indent = tab;
+            ln('},');
+            blank();
+            ln('_buildUI: function () {');
+            indent = tab + tab;
+            ln('var self = this;');
+            blank();
+        }
+
+        if (srcTree) {
+            exportNode(srcTree, null);
+
+            if (wrapInLayer) {
+                if (includeComments) ln('// Store node references');
+                ln('this._nodes = {');
+                indent = tab + tab + tab;
+                for (var nr = 0; nr < nodeRefs.length; nr++) {
+                    ln(nodeRefs[nr] + ': ' + nodeRefs[nr] + (nr < nodeRefs.length - 1 ? ',' : ''));
+                }
+                indent = tab + tab;
+                ln('};');
+            }
+        }
+
+        if (wrapInLayer && refNodes.length > 0) {
+            blank();
+            if (includeComments) ln('// Button callbacks');
+            for (var b = 0; b < refNodes.length; b++) {
+                var bn = refNodes[b];
+                var bv = sanitizeName(bn);
+                ln(bv + '.addClickEventListener(function () {');
+                indent = tab + tab + tab;
+                ln('self._on' + bn.charAt(0).toUpperCase() + bn.slice(1) + '();');
+                indent = tab + tab;
+                ln('});');
+            }
+        }
+
+        if (wrapInLayer) {
+            indent = tab;
+            ln('},');
+
+            if (refNodes.length > 0) {
+                blank();
+                if (includeComments) ln('// ── Callbacks ──');
+                for (var cb = 0; cb < refNodes.length; cb++) {
+                    var cbN = refNodes[cb];
+                    var mN = '_on' + cbN.charAt(0).toUpperCase() + cbN.slice(1);
+                    var last = (cb === refNodes.length - 1);
+                    ln(mN + ': function () {');
+                    indent = tab + tab;
+                    ln('cc.log("' + cbN + ' clicked");');
+                    indent = tab;
+                    ln('}' + (last ? '' : ','));
+                    if (!last) blank();
+                }
+            }
+
+            indent = '';
+            ln('});');
+            blank();
+
+            ln('var ' + layerName.replace('Layer', 'Scene') + ' = cc.Scene.extend({');
+            indent = tab;
+            ln('onEnter: function () {');
+            indent = tab + tab;
+            ln('this._super();');
+            ln('var layer = new ' + layerName + '();');
+            ln('layer.setName("' + layerName + '");');
+            ln('this.addChild(layer);');
+            indent = tab;
+            ln('}');
+            indent = '';
+            ln('});');
+        }
+
+        return lines.join('\n');
+    };
+
+    /**
+     * Export RESPONSIVE UIBuilder code that uses LayoutEngine at runtime.
+     * Generated code reads cc.winSize and computes layout dynamically,
+     * so the same code works at any screen resolution.
+     *
+     * @param {Object} options
+     *   resourceMapVar    : string   — JS variable for resource map (e.g. "res_preview")
+     *   layerName         : string   — Layer class name (e.g. "PreviewLayer")
+     *   indent            : string   — indentation (default "    ")
+     *   includeAnimations : boolean  (default true)
+     *   includeComments   : boolean  (default true)
+     * @returns {string} JavaScript code string
+     */
+    LayoutEngine.prototype.exportResponsiveCode = function(options) {
+        options = options || {};
+        var resVar = options.resourceMapVar || '';
+        var layerName = options.layerName || 'GeneratedLayer';
+        var tab = options.indent || '    ';
+        var includeAnims = options.includeAnimations !== false;
+        var includeComments = options.includeComments !== false;
+
+        var lines = [];
+        var indent = '';
+        var refNodes = [];
+        var nodeNames = [];
+
+        function ln(s) { lines.push(indent + (s || '')); }
+        function blank() { lines.push(''); }
+        function sanitizeName(name) { return (name || 'node').replace(/[^a-zA-Z0-9_$]/g, '_'); }
+        function getResRef(name) { return resVar ? resVar + '.' + sanitizeName(name) : null; }
+
+        function _getEasingCode(n) {
+            if (!n || n === 'linear') return null;
+            var m = {
+                'easeIn':'cc.easeIn(2)','easeOut':'cc.easeOut(2)','easeInOut':'cc.easeInOut(2)',
+                'easeInCubic':'cc.easeIn(3)','easeOutCubic':'cc.easeOut(3)','easeInOutCubic':'cc.easeInOut(3)',
+                'bounce':'cc.easeBounceOut()','elastic':'cc.easeElasticOut()',
+                'backIn':'cc.easeBackIn()','backOut':'cc.easeBackOut()'
+            };
+            return m[n] || null;
+        }
+
+        // ── Build node: create without position/size ──
+        function buildNode(node, parentVar) {
+            var name = node.name || node._id || 'node';
+            var varName = sanitizeName(name);
+            var type = node.type || '';
+            var anchor = node.anchor || [0.5, 0.5];
+
+            nodeNames.push(varName);
+
+            if (includeComments && node.name) {
+                var lbl = '';
+                if (node.layoutType === 'Linear') {
+                    lbl = node.flexDirection === 'row' || node.flexDirection === 'row-reverse' ? ' (Row)' : ' (Column)';
+                }
+                ln('// ── ' + name + lbl + ' ──');
+            }
+
+            if ((type === 'sprite' || type === 'imageView') && node.scaleMode === 'FILL') {
+                var bgRes = getResRef(name);
+                ln('var ' + varName + ' = new cc.Sprite(' + (bgRes || '') + ');');
+            } else if (type === 'sprite' || type === 'imageView') {
+                var sprRes = getResRef(name);
+                ln('var ' + varName + ' = ' + (sprRes ? 'UIBuilder.sprite(' + sprRes + ')' : 'new cc.Sprite()') + ';');
+            } else if (type === 'button') {
+                var btnRes = getResRef(name);
+                ln('var ' + varName + ' = ' + (btnRes ? 'UIBuilder.button(' + btnRes + ')' : 'new ccui.Button()') + ';');
+                ln(varName + '.setPressedActionEnabled(true);');
+                if (node.title) ln(varName + '.setTitleText("' + node.title.replace(/"/g, '\\"') + '");');
+                refNodes.push(name);
+            } else if (type === 'label' || type === 'text') {
+                var text = (node.text || 'Text').replace(/"/g, '\\"');
+                var fontSize = node.fontSize || node.titleFontSize || 20;
+                ln('var ' + varName + ' = new cc.LabelTTF("' + text + '", "' + (node.fontName || 'Arial') + '", ' + fontSize + ');');
+            } else if (type === 'scale9') {
+                var s9Res = getResRef(name);
+                ln('var ' + varName + ' = new ccui.Scale9Sprite(' + (s9Res || '') + ');');
+            } else if (type === 'progressBar') {
+                var pbRes = getResRef(name);
+                ln('var ' + varName + ' = ' + (pbRes ? 'UIBuilder.sprite(' + pbRes + ')' : 'new cc.Node()') + ';');
+            } else {
+                ln('var ' + varName + ' = new cc.Node();');
+            }
+
+            if (node.name) ln(varName + '.setName("' + name + '");');
+
+            var isVisualType = (type === 'sprite' || type === 'button' || type === 'imageView'
+                || type === 'scale9' || type === 'label' || type === 'text' || type === 'progressBar');
+            if (!isVisualType || anchor[0] !== 0.5 || anchor[1] !== 0.5) {
+                ln(varName + '.setAnchorPoint(' + anchor[0] + ', ' + anchor[1] + ');');
+            }
+
+            if (node.rotation) ln(varName + '.setRotation(' + node.rotation + ');');
+            if (node.opacity !== undefined && node.opacity !== 255) ln(varName + '.setOpacity(' + node.opacity + ');');
+            if (node.visible === false) ln(varName + '.setVisible(false);');
+            if (node.zOrder) ln(varName + '.setLocalZOrder(' + node.zOrder + ');');
+
+            if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
+            blank();
+
+            if (node.children) {
+                for (var c = 0; c < node.children.length; c++) {
+                    buildNode(node.children[c], varName);
+                }
+            }
+        }
+
+        // ── Emit animations using nodes map ──
+        function emitAnimations(node) {
+            var name = node.name || node._id || 'node';
+            var varName = 'nodes.' + sanitizeName(name);
+            var anims = node._animations;
+
+            if (anims && anims.length > 0) {
+                if (includeComments) ln('// Animations for ' + name);
+                for (var a = 0; a < anims.length; a++) {
+                    var anim = anims[a];
+                    var actVar = sanitizeName(name) + '_anim' + a;
+                    var dur = (anim.duration / 1000).toFixed(2);
+                    var toVal = anim.to;
+                    var isLoop = (anim.sequence === 'loop');
+                    var isPosP = (anim.prop === 'x' || anim.prop === 'y');
+
+                    if (anim.from !== undefined && !(isLoop && isPosP)) {
+                        switch (anim.prop) {
+                            case 'opacity': ln(varName + '.setOpacity(' + anim.from + ');'); break;
+                            case 'rotation': ln(varName + '.setRotation(' + anim.from + ');'); break;
+                            case 'scale': ln(varName + '.setScale(' + anim.from + ');'); break;
+                        }
+                    }
+
+                    if (anim.prop === 'opacity') ln('var ' + actVar + ' = cc.fadeTo(' + dur + ', ' + toVal + ');');
+                    else if (anim.prop === 'rotation') ln('var ' + actVar + ' = cc.rotateTo(' + dur + ', ' + toVal + ');');
+                    else if (anim.prop === 'scale') ln('var ' + actVar + ' = cc.scaleTo(' + dur + ', ' + toVal + ');');
+                    else if (anim.prop === 'y') {
+                        if (isLoop) ln('var ' + actVar + ' = cc.moveBy(' + dur + ', 0, ' + (toVal - (anim.from||0)) + ');');
+                        else ln('var ' + actVar + ' = cc.moveTo(' + dur + ', ' + varName + '.getPositionX(), ' + toVal + ');');
+                    } else if (anim.prop === 'x') {
+                        if (isLoop) ln('var ' + actVar + ' = cc.moveBy(' + dur + ', ' + (toVal - (anim.from||0)) + ', 0);');
+                        else ln('var ' + actVar + ' = cc.moveTo(' + dur + ', ' + toVal + ', ' + varName + '.getPositionY());');
+                    } else continue;
+
+                    var ec = _getEasingCode(anim.easing);
+                    if (ec) ln(actVar + ' = ' + actVar + '.easing(' + ec + ');');
+
+                    if (anim.yoyo) {
+                        if (isLoop && isPosP) {
+                            ln(actVar + ' = cc.sequence(' + actVar + ', ' + actVar + '.reverse());');
+                        } else if (anim.from !== undefined) {
+                            var rv = actVar + '_rev';
+                            if (anim.prop === 'scale') ln('var ' + rv + ' = cc.scaleTo(' + dur + ', ' + anim.from + ');');
+                            if (ec) ln(rv + ' = ' + rv + '.easing(' + ec + ');');
+                            ln(actVar + ' = cc.sequence(' + actVar + ', ' + rv + ');');
+                        }
+                    }
+
+                    if (anim.delay > 0) ln(actVar + ' = cc.sequence(cc.delayTime(' + (anim.delay/1000).toFixed(2) + '), ' + actVar + ');');
+                    if (anim.repeat === -1) ln(actVar + ' = cc.repeatForever(' + actVar + ');');
+                    else if (anim.repeat > 1) ln(actVar + ' = cc.repeat(' + actVar + ', ' + anim.repeat + ');');
+                    ln(varName + '.runAction(' + actVar + ');');
+                }
+                blank();
+            }
+
+            if (node.children) {
+                for (var c = 0; c < node.children.length; c++) {
+                    emitAnimations(node.children[c]);
+                }
+            }
+        }
+
+        // ── Serialize JSON (skip internal _ keys) ──
+        function serializeJSON(obj, depth) {
+            depth = depth || 0;
+            var pad = ''; for (var d = 0; d < depth; d++) pad += tab;
+            var pad1 = pad + tab;
+
+            if (obj === null || obj === undefined) return 'null';
+            if (typeof obj === 'boolean' || typeof obj === 'number') return String(obj);
+            if (typeof obj === 'string') return '"' + obj.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+
+            if (Array.isArray(obj)) {
+                var allPrim = obj.every(function(v) { return v === null || typeof v !== 'object'; });
+                if (allPrim && obj.length <= 6) {
+                    return '[' + obj.map(function(v) { return serializeJSON(v, 0); }).join(', ') + ']';
+                }
+                var items = obj.map(function(v) { return pad1 + serializeJSON(v, depth + 1); });
+                return '[\n' + items.join(',\n') + '\n' + pad + ']';
+            }
+
+            var keys = Object.keys(obj).filter(function(k) { return k[0] !== '_'; });
+            if (keys.length === 0) return '{}';
+
+            var allPrimVals = keys.every(function(k) { return obj[k] === null || typeof obj[k] !== 'object'; });
+            if (allPrimVals && keys.length <= 4) {
+                var pairs = keys.map(function(k) {
+                    var qk = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) ? k : '"' + k + '"';
+                    return qk + ': ' + serializeJSON(obj[k], 0);
+                });
+                return '{ ' + pairs.join(', ') + ' }';
+            }
+
+            var objPairs = keys.map(function(k) {
+                var qk = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) ? k : '"' + k + '"';
+                return pad1 + qk + ': ' + serializeJSON(obj[k], depth + 1);
+            });
+            return '{\n' + objPairs.join(',\n') + '\n' + pad + '}';
+        }
+
+        // ═══════════════════════════════════════════
+        //  GENERATE OUTPUT
+        // ═══════════════════════════════════════════
+
+        ln('/**');
+        ln(' * ' + layerName + ' — Auto-generated RESPONSIVE layout');
+        ln(' * Adapts to any screen size via LayoutEngine at runtime.');
+        ln(' */');
+        blank();
+        ln('var ' + layerName + ' = cc.Layer.extend({');
+        blank();
+        indent = tab;
+
+        // ctor
+        ln('ctor: function () {');
+        indent = tab + tab;
+        ln('this._super();');
+        ln('this._buildUI();');
+        ln('this._relayout();');
+        if (includeAnims) ln('this._startAnimations();');
+        ln('return true;');
+        indent = tab;
+        ln('},');
+        blank();
+
+        // _buildUI
+        ln('_buildUI: function () {');
+        indent = tab + tab;
+        ln('var self = this;');
+        blank();
+
+        if (this._root) {
+            buildNode(this._root, null);
+            var rootVar = sanitizeName(this._root.name || this._root._id || 'root');
+            ln('this.addChild(' + rootVar + ');');
+            blank();
+            if (includeComments) ln('// Store node references');
+            ln('this._nodes = {');
+            indent = tab + tab + tab;
+            for (var nr = 0; nr < nodeNames.length; nr++) {
+                ln(nodeNames[nr] + ': ' + nodeNames[nr] + (nr < nodeNames.length - 1 ? ',' : ''));
+            }
+            indent = tab + tab;
+            ln('};');
+        }
+
+        if (refNodes.length > 0) {
+            blank();
+            if (includeComments) ln('// Button callbacks');
+            for (var b = 0; b < refNodes.length; b++) {
+                var bn = refNodes[b];
+                var bv = sanitizeName(bn);
+                ln(bv + '.addClickEventListener(function () {');
+                indent = tab + tab + tab;
+                ln('self._on' + bn.charAt(0).toUpperCase() + bn.slice(1) + '();');
+                indent = tab + tab;
+                ln('});');
+            }
+        }
+
+        indent = tab;
+        ln('},');
+        blank();
+
+        // _getLayoutJSON
+        ln('_getLayoutJSON: function () {');
+        indent = tab + tab;
+        ln('return ' + serializeJSON(this._root, 2) + ';');
+        indent = tab;
+        ln('},');
+        blank();
+
+        // _relayout
+        ln('_relayout: function () {');
+        indent = tab + tab;
+        ln('var engine = new LayoutEngine();');
+        ln('engine.buildTree(this._getLayoutJSON());');
+        ln('engine.computeLayout(cc.winSize.width, cc.winSize.height);');
+        blank();
+        ln('var nodes = this._nodes;');
+        ln('for (var name in nodes) {');
+        indent = tab + tab + tab;
+        ln('var b = engine.getNodeBounds(name);');
+        ln('if (b) {');
+        indent = tab + tab + tab + tab;
+        ln('nodes[name].setContentSize(b.width, b.height);');
+        ln('nodes[name].setPosition(b.x, b.y);');
+        ln('if (b.scaleX !== 1 || b.scaleY !== 1) {');
+        indent = tab + tab + tab + tab + tab;
+        ln('nodes[name].setScaleX(b.scaleX);');
+        ln('nodes[name].setScaleY(b.scaleY);');
+        indent = tab + tab + tab + tab;
+        ln('}');
+        indent = tab + tab + tab;
+        ln('}');
+        indent = tab + tab;
+        ln('}');
+        indent = tab;
+        ln('},');
+
+        // _startAnimations
+        if (includeAnims && this._root) {
+            blank();
+            ln('_startAnimations: function () {');
+            indent = tab + tab;
+            ln('var nodes = this._nodes;');
+            blank();
+            emitAnimations(this._root);
+            indent = tab;
+            ln('},');
+        }
+
+        // Callback stubs
+        if (refNodes.length > 0) {
+            blank();
+            if (includeComments) ln('// ── Callbacks ──');
+            for (var cb = 0; cb < refNodes.length; cb++) {
+                var cbN = refNodes[cb];
+                var mN = '_on' + cbN.charAt(0).toUpperCase() + cbN.slice(1);
+                var last = (cb === refNodes.length - 1);
+                ln(mN + ': function () {');
+                indent = tab + tab;
+                ln('cc.log("' + cbN + ' clicked");');
+                indent = tab;
+                ln('}' + (last ? '' : ','));
+                if (!last) blank();
+            }
+        }
+
+        indent = '';
+        ln('});');
+        blank();
+
+        // Scene wrapper
+        ln('var ' + layerName.replace('Layer', 'Scene') + ' = cc.Scene.extend({');
+        indent = tab;
+        ln('onEnter: function () {');
+        indent = tab + tab;
+        ln('this._super();');
+        ln('var layer = new ' + layerName + '();');
+        ln('layer.setName("' + layerName + '");');
+        ln('this.addChild(layer);');
+        indent = tab;
+        ln('}');
+        indent = '';
+        ln('});');
 
         return lines.join('\n');
     };

@@ -4,14 +4,31 @@
 (function (B) {
 
     /**
-     * Create a full-screen background sprite centered on the screen.
+     * Create a full-screen background sprite centered on the parent.
      * @param {cc.Node} parent
-     * @param {string}  file    Path to image or AssetManifest key
+     * @param {string}  file       Path to image or AssetManifest key
+     * @param {string}  [scaleMode]  "FILL" (cover), "FIT" (contain), or "STRETCH" (fill, may distort). Default: "FILL"
      * @returns {cc.Sprite}
      */
-    B.createBackground = function (parent, file) {
+    B.createBackground = function (parent, file, scaleMode) {
         var bg = new cc.Sprite(file);
-        bg.setPosition(cc.winSize.width / 2, cc.winSize.height / 2);
+        var ps = parent.getContentSize();
+        var origSize = bg.getContentSize();
+        if (origSize.width > 0 && origSize.height > 0) {
+            var scaleX = ps.width / origSize.width;
+            var scaleY = ps.height / origSize.height;
+            if (scaleMode === 'FIT') {
+                var s = Math.min(scaleX, scaleY);  // contain (uniform)
+                bg.setScale(s);
+            } else if (scaleMode === 'STRETCH') {
+                bg.setScaleX(scaleX);               // fill exactly (non-uniform)
+                bg.setScaleY(scaleY);
+            } else {
+                var s = Math.max(scaleX, scaleY);  // cover (uniform) — default FILL
+                bg.setScale(s);
+            }
+        }
+        bg.setPosition(ps.width / 2, ps.height / 2);
         parent.addChild(bg);
         return bg;
     };

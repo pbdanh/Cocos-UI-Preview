@@ -186,66 +186,97 @@
      * UIBuilder.pinEdges(panel, { horizontalCenter: true, verticalCenter: true });
      */
     B.pinEdges = function (node, edges) {
-        var lc = ccui.LayoutComponent.bindLayoutComponent(node);
+        var parent = node.getParent();
+        if (!parent) return null;
+        var ps = parent.getContentSize();
+        var ns = node.getContentSize();
+        var ax = node.getAnchorPoint().x;
+        var ay = node.getAnchorPoint().y;
 
-        // Horizontal edge
+        // ── Compute position based on edges ──
+        var x = node.getPositionX();
+        var y = node.getPositionY();
+
+        // Horizontal
         if (edges.horizontalCenter) {
-            lc.setHorizontalEdge(ccui.LayoutComponent.horizontalEdge.CENTER);
+            // Center node horizontally in parent
+            x = ps.width / 2 - ns.width * (0.5 - ax);
         } else if (edges.left !== undefined && edges.right !== undefined) {
-            // Both edges: use CENTER + margins + stretch to fill between them
-            lc.setHorizontalEdge(ccui.LayoutComponent.horizontalEdge.CENTER);
-            lc.setLeftMargin(edges.left);
-            lc.setRightMargin(edges.right);
-            lc.setStretchWidthEnabled(true);
+            // Stretch between left and right
+            var newW = ps.width - edges.left - edges.right;
+            node.setContentSize(newW, ns.height);
+            ns = node.getContentSize();
+            x = edges.left + ns.width * ax;
         } else if (edges.left !== undefined) {
-            lc.setHorizontalEdge(ccui.LayoutComponent.horizontalEdge.LEFT);
-            lc.setLeftMargin(edges.left);
-            if (edges.stretchWidth) lc.setStretchWidthEnabled(true);
+            x = edges.left + ns.width * ax;
         } else if (edges.right !== undefined) {
-            lc.setHorizontalEdge(ccui.LayoutComponent.horizontalEdge.RIGHT);
-            lc.setRightMargin(edges.right);
-            if (edges.stretchWidth) lc.setStretchWidthEnabled(true);
+            x = ps.width - edges.right - ns.width * (1 - ax);
         }
 
-        // Vertical edge
+        // Vertical
         if (edges.verticalCenter) {
-            lc.setVerticalEdge(ccui.LayoutComponent.verticalEdge.CENTER);
+            // Center node vertically in parent
+            y = ps.height / 2 - ns.height * (0.5 - ay);
         } else if (edges.top !== undefined && edges.bottom !== undefined) {
-            // Both edges: use CENTER + margins + stretch to fill between them
-            lc.setVerticalEdge(ccui.LayoutComponent.verticalEdge.CENTER);
-            lc.setTopMargin(edges.top);
-            lc.setBottomMargin(edges.bottom);
-            lc.setStretchHeightEnabled(true);
+            // Stretch between top and bottom
+            var newH = ps.height - edges.top - edges.bottom;
+            node.setContentSize(ns.width, newH);
+            ns = node.getContentSize();
+            y = edges.bottom + ns.height * ay;
         } else if (edges.top !== undefined) {
-            lc.setVerticalEdge(ccui.LayoutComponent.verticalEdge.TOP);
-            lc.setTopMargin(edges.top);
-            if (edges.stretchHeight) lc.setStretchHeightEnabled(true);
+            y = ps.height - edges.top - ns.height * (1 - ay);
         } else if (edges.bottom !== undefined) {
-            lc.setVerticalEdge(ccui.LayoutComponent.verticalEdge.BOTTOM);
-            lc.setBottomMargin(edges.bottom);
-            if (edges.stretchHeight) lc.setStretchHeightEnabled(true);
+            y = edges.bottom + ns.height * ay;
         }
 
-        // Percent sizing
-        if (edges.percentWidth !== undefined) {
-            lc.setPercentWidthEnabled(true);
-            lc.setPercentWidth(edges.percentWidth);
-        }
-        if (edges.percentHeight !== undefined) {
-            lc.setPercentHeightEnabled(true);
-            lc.setPercentHeight(edges.percentHeight);
+        node.setPosition(x, y);
+
+        // Also bind LayoutComponent for resize behavior (if parent is ccui.Layout)
+        if (parent instanceof ccui.Layout) {
+            var lc = ccui.LayoutComponent.bindLayoutComponent(node);
+            if (edges.horizontalCenter) {
+                lc.setHorizontalEdge(ccui.LayoutComponent.horizontalEdge.CENTER);
+            } else if (edges.left !== undefined && edges.right !== undefined) {
+                lc.setHorizontalEdge(ccui.LayoutComponent.horizontalEdge.CENTER);
+                lc.setLeftMargin(edges.left);
+                lc.setRightMargin(edges.right);
+                lc.setStretchWidthEnabled(true);
+            } else if (edges.left !== undefined) {
+                lc.setHorizontalEdge(ccui.LayoutComponent.horizontalEdge.LEFT);
+                lc.setLeftMargin(edges.left);
+            } else if (edges.right !== undefined) {
+                lc.setHorizontalEdge(ccui.LayoutComponent.horizontalEdge.RIGHT);
+                lc.setRightMargin(edges.right);
+            }
+
+            if (edges.verticalCenter) {
+                lc.setVerticalEdge(ccui.LayoutComponent.verticalEdge.CENTER);
+            } else if (edges.top !== undefined && edges.bottom !== undefined) {
+                lc.setVerticalEdge(ccui.LayoutComponent.verticalEdge.CENTER);
+                lc.setTopMargin(edges.top);
+                lc.setBottomMargin(edges.bottom);
+                lc.setStretchHeightEnabled(true);
+            } else if (edges.top !== undefined) {
+                lc.setVerticalEdge(ccui.LayoutComponent.verticalEdge.TOP);
+                lc.setTopMargin(edges.top);
+            } else if (edges.bottom !== undefined) {
+                lc.setVerticalEdge(ccui.LayoutComponent.verticalEdge.BOTTOM);
+                lc.setBottomMargin(edges.bottom);
+            }
+
+            if (edges.percentWidth !== undefined) {
+                lc.setPercentWidthEnabled(true);
+                lc.setPercentWidth(edges.percentWidth);
+            }
+            if (edges.percentHeight !== undefined) {
+                lc.setPercentHeightEnabled(true);
+                lc.setPercentHeight(edges.percentHeight);
+            }
+
+            lc.refreshLayout();
         }
 
-        // Stretch (without both edges set above)
-        if (edges.stretchWidth && edges.left === undefined && edges.right === undefined) {
-            lc.setStretchWidthEnabled(true);
-        }
-        if (edges.stretchHeight && edges.top === undefined && edges.bottom === undefined) {
-            lc.setStretchHeightEnabled(true);
-        }
-
-        lc.refreshLayout();
-        return lc;
+        return node;
     };
 
     /**
@@ -339,6 +370,160 @@
         widget.setLayoutParameter(param);
         layout.addChild(widget, (opts && opts.zOrder) || 0);
         return widget;
+    };
+
+    // ───────────────────────────────────────────────────────────────
+    //  FLEXBOX-LIKE ARRANGEMENT HELPERS
+    // ───────────────────────────────────────────────────────────────
+
+    /**
+     * Arrange children of a container as a horizontal row (left-to-right).
+     * Uses ABSOLUTE positioning — works with any cc.Node, not just ccui.Widget.
+     *
+     * @param {cc.Node} container  Parent node (must already have children added)
+     * @param {Object}  [opts]
+     *   gap            : number  — spacing between children (px)
+     *   alignItems     : string  — cross-axis alignment: 'start'|'center'|'end' (default: 'start')
+     *   justifyContent : string  — main-axis: 'start'|'center'|'end'|'spaceBetween'|'spaceAround'
+     */
+    B.arrangeAsRow = function (container, opts) {
+        opts = opts || {};
+        var children = container.getChildren();
+        if (!children || children.length === 0) return;
+
+        var gap = opts.gap || 0;
+        var align = opts.alignItems || 'start';
+        var justify = opts.justifyContent || 'start';
+        var parentH = container.getContentSize().height;
+        var parentW = container.getContentSize().width;
+
+        // Calculate total width of children + gaps
+        var totalW = 0;
+        var i, child, cs;
+        for (i = 0; i < children.length; i++) {
+            cs = children[i].getContentSize();
+            totalW += cs.width;
+            if (i > 0) totalW += gap;
+        }
+
+        // Compute starting X based on justifyContent
+        var x = 0;
+        var extraGap = 0;
+        if (justify === 'center') {
+            x = (parentW - totalW) / 2;
+        } else if (justify === 'end') {
+            x = parentW - totalW;
+        } else if (justify === 'spaceBetween' && children.length > 1) {
+            var totalChildW = 0;
+            for (i = 0; i < children.length; i++) totalChildW += children[i].getContentSize().width;
+            extraGap = (parentW - totalChildW) / (children.length - 1);
+            gap = extraGap;
+        } else if (justify === 'spaceAround' && children.length > 0) {
+            var totalChildW2 = 0;
+            for (i = 0; i < children.length; i++) totalChildW2 += children[i].getContentSize().width;
+            extraGap = (parentW - totalChildW2) / children.length;
+            x = extraGap / 2;
+            gap = extraGap;
+        }
+
+        // Position each child
+        for (i = 0; i < children.length; i++) {
+            child = children[i];
+            cs = child.getContentSize();
+            var anchor = child.getAnchorPoint();
+
+            // Main axis (X) — position with anchor offset
+            var posX = x + cs.width * anchor.x;
+
+            // Cross axis (Y)
+            var posY;
+            if (align === 'center') {
+                posY = parentH / 2 + (anchor.y - 0.5) * cs.height;
+            } else if (align === 'end') {
+                posY = parentH - cs.height * (1 - anchor.y);
+            } else {
+                // start (bottom)
+                posY = cs.height * anchor.y;
+            }
+
+            child.setPosition(posX, posY);
+            x += cs.width + (i < children.length - 1 ? gap : 0);
+        }
+    };
+
+    /**
+     * Arrange children of a container as a vertical column (top-to-bottom).
+     * Uses ABSOLUTE positioning — works with any cc.Node, not just ccui.Widget.
+     *
+     * @param {cc.Node} container  Parent node (must already have children added)
+     * @param {Object}  [opts]
+     *   gap            : number  — spacing between children (px)
+     *   alignItems     : string  — cross-axis alignment: 'start'|'center'|'end' (default: 'start')
+     *   justifyContent : string  — main-axis: 'start'|'center'|'end'|'spaceBetween'|'spaceAround'
+     */
+    B.arrangeAsColumn = function (container, opts) {
+        opts = opts || {};
+        var children = container.getChildren();
+        if (!children || children.length === 0) return;
+
+        var gap = opts.gap || 0;
+        var align = opts.alignItems || 'start';
+        var justify = opts.justifyContent || 'start';
+        var parentW = container.getContentSize().width;
+        var parentH = container.getContentSize().height;
+
+        // Calculate total height of children + gaps
+        var totalH = 0;
+        var i, child, cs;
+        for (i = 0; i < children.length; i++) {
+            cs = children[i].getContentSize();
+            totalH += cs.height;
+            if (i > 0) totalH += gap;
+        }
+
+        // Top-to-bottom: start from top of container
+        var y = parentH;
+        var extraGap = 0;
+        if (justify === 'center') {
+            y = parentH - (parentH - totalH) / 2;
+        } else if (justify === 'end') {
+            y = totalH;
+        } else if (justify === 'spaceBetween' && children.length > 1) {
+            var totalChildH = 0;
+            for (i = 0; i < children.length; i++) totalChildH += children[i].getContentSize().height;
+            extraGap = (parentH - totalChildH) / (children.length - 1);
+            gap = extraGap;
+        } else if (justify === 'spaceAround' && children.length > 0) {
+            var totalChildH2 = 0;
+            for (i = 0; i < children.length; i++) totalChildH2 += children[i].getContentSize().height;
+            extraGap = (parentH - totalChildH2) / children.length;
+            y = parentH - extraGap / 2;
+            gap = extraGap;
+        }
+
+        // Position each child (top-to-bottom in Cocos = decreasing Y)
+        for (i = 0; i < children.length; i++) {
+            child = children[i];
+            cs = child.getContentSize();
+            var anchor = child.getAnchorPoint();
+
+            // Main axis (Y) — position from top
+            var posY = y - cs.height * (1 - anchor.y);
+
+            // Cross axis (X)
+            var posX;
+            if (align === 'center') {
+                posX = parentW / 2 + (anchor.x - 0.5) * cs.width;
+            } else if (align === 'end') {
+                posX = parentW - cs.width * (1 - anchor.x);
+            } else {
+                // start (left)
+                posX = cs.width * anchor.x;
+            }
+
+            child.setPosition(posX, posY);
+            y -= cs.height + (i < children.length - 1 ? gap : 0);
+        }
     };
 
 })(UIBuilder);

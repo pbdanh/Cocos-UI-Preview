@@ -1,8 +1,8 @@
-cc.game.onStart = function(){
-    if(!cc.sys.isNative && document.getElementById("cocosLoading"))
+cc.game.onStart = function () {
+    if (!cc.sys.isNative && document.getElementById("cocosLoading"))
         document.body.removeChild(document.getElementById("cocosLoading"));
 
-    var designSize = cc.size(873, 643);
+    var designSize = cc.size(1280, 720);
 
     cc.view.setDesignResolutionSize(designSize.width, designSize.height, cc.ResolutionPolicy.SHOW_ALL);
     cc.view.resizeWithBrowserSize(true);

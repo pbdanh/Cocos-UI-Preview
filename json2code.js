@@ -6,6 +6,8 @@
  *   node json2code.js --input endgame-preview.json
  *   node json2code.js --input endgame-preview.json --output EndGameLayer.js --resources res_endgame --layer EndGameLayer
  *   node json2code.js --input endgame-preview.json --width 873 --height 643 --no-wrap
+ *   node json2code.js --input endgame-preview.json --responsive --layer PreviewLayer
+ *   node json2code.js --input endgame-preview.json --adaptive --layer PreviewLayer
  *
  * Options:
  *   --input, -i      Input JSON file path (required)
@@ -18,6 +20,8 @@
  *   --no-anims       Skip animations
  *   --no-comments    Skip comments
  *   --raw            Use raw cc.* export instead of UIBuilder
+ *   --responsive     Generate responsive code (uses LayoutEngine at runtime)
+ *   --adaptive       Generate adaptive code (uses ccui.Layout + pinEdges, no runtime engine)
  */
 
 var fs = require('fs');
@@ -39,7 +43,9 @@ var opts = {
     wrap: true,
     anims: true,
     comments: true,
-    raw: false
+    raw: false,
+    responsive: false,
+    adaptive: false
 };
 
 for (var i = 0; i < args.length; i++) {
@@ -54,6 +60,8 @@ for (var i = 0; i < args.length; i++) {
         case '--no-wrap': opts.wrap = false; break;
         case '--no-anims': opts.anims = false; break;
         case '--no-comments': opts.comments = false; break;
+        case '--responsive': opts.responsive = true; break;
+        case '--adaptive': opts.adaptive = true; break;
         case '--raw': opts.raw = true; break;
         case '--help':
             console.log('Usage: node json2code.js --input <file.json> [options]');
@@ -69,6 +77,8 @@ for (var i = 0; i < args.length; i++) {
             console.log('  --no-anims       Skip animations');
             console.log('  --no-comments    Skip comments');
             console.log('  --raw            Use raw cc.* export');
+            console.log('  --responsive     Generate responsive layout code');
+            console.log('  --adaptive       Generate adaptive layout (ccui.Layout + pinEdges)');
             process.exit(0);
             break;
         default:
@@ -108,7 +118,22 @@ engine.computeLayout(opts.width, opts.height);
 
 // Export code
 var code;
-if (opts.raw) {
+if (opts.adaptive) {
+    code = engine.exportAdaptiveCode({
+        resourceMapVar: opts.resources,
+        layerName: opts.layer,
+        wrapInLayer: opts.wrap,
+        includeAnimations: opts.anims,
+        includeComments: opts.comments
+    });
+} else if (opts.responsive) {
+    code = engine.exportResponsiveCode({
+        resourceMapVar: opts.resources,
+        layerName: opts.layer,
+        includeAnimations: opts.anims,
+        includeComments: opts.comments
+    });
+} else if (opts.raw) {
     code = engine.exportCocosCode({
         includeAnimations: opts.anims
     });
