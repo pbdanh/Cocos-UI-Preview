@@ -34,6 +34,106 @@
     };
 
     /**
+     * Create a cc.Sprite (shorthand).
+     * @param {string} file  Path to image
+     * @returns {cc.Sprite}
+     */
+    B.sprite = function (file) {
+        return new cc.Sprite(file);
+    };
+
+    /**
+     * Create a ccui.Button (shorthand).
+     * @param {string} file  Path to image for normal state
+     * @returns {ccui.Button}
+     */
+    B.button = function (file) {
+        var btn = new ccui.Button(file);
+        btn.setPressedActionEnabled(true);
+        return btn;
+    };
+
+    /**
+     * Set the desired layout size for any node.
+     *
+     * For visual nodes (cc.Sprite, ccui.ImageView):
+     *   - Default: uniform scale to FIT within w×h (no distortion).
+     *   - scaleMode "FILL": uniform scale to COVER w×h (may crop).
+     *   - scaleMode "STRETCH": non-uniform scale to exact w×h.
+     *   - If w/h are 0 and scaleMode is set, uses parent's size as target.
+     *   - setContentSize(w, h) is always set for layout bounding box.
+     *
+     * For containers (cc.Node, ccui.Layout):
+     *   - Sets contentSize directly.
+     *
+     * If width/height not provided and no scaleMode, sprite keeps natural texture size.
+     *
+     * @param {cc.Node} node       Target node
+     * @param {number}  w          Desired layout width (px), 0 = use parent width
+     * @param {number}  h          Desired layout height (px), 0 = use parent height
+     * @param {string}  [scaleMode]  "FIT" (default), "FILL" (cover), "STRETCH"
+     * @returns {cc.Node}
+     */
+    B.setLayoutSize = function (node, w, h, scaleMode) {
+        // If scaleMode set but no explicit size, use parent's size
+        if (scaleMode && (w <= 0 || h <= 0)) {
+            var parent = node.getParent();
+            if (parent) {
+                var ps = parent.getContentSize();
+                if (w <= 0) w = ps.width;
+                if (h <= 0) h = ps.height;
+            }
+        }
+
+        if (w <= 0 && h <= 0) return node;
+
+        var origSize = node.getContentSize();
+
+        // For sprites/images: scale texture to fit layout size
+        if ((node instanceof cc.Sprite || node instanceof ccui.ImageView) &&
+            origSize.width > 0 && origSize.height > 0) {
+            var sx = w > 0 ? w / origSize.width : Infinity;
+            var sy = h > 0 ? h / origSize.height : Infinity;
+
+            if (scaleMode === 'FILL') {
+                // Cover: use larger scale (may crop)
+                var s = Math.max(sx, sy);
+                node.setScale(s);
+            } else if (scaleMode === 'STRETCH') {
+                // Stretch: non-uniform (may distort)
+                if (sx === Infinity) sx = 1;
+                if (sy === Infinity) sy = 1;
+                node.setScaleX(sx);
+                node.setScaleY(sy);
+            } else {
+                // FIT (default): use smaller scale (no distortion, no crop)
+                var s = Math.min(sx, sy);
+                if (s === Infinity) s = 1;
+                node.setScale(s);
+            }
+        }
+        // Sprite with no texture loaded (empty): just use target size as-is
+        // Texture will be loaded later; call setLayoutSize again after loading if needed
+
+        // Center sprite within its layout bounds when using scaleMode
+        if (scaleMode && w > 0 && h > 0) {
+            node.setAnchorPoint(0.5, 0.5);
+            node.setPosition(w / 2, h / 2);
+        }
+
+        // Always set content size for layout calculations
+        if (w > 0 && h > 0) {
+            node.setContentSize(w, h);
+        } else if (w > 0) {
+            node.setContentSize(w, origSize.height);
+        } else if (h > 0) {
+            node.setContentSize(origSize.width, h);
+        }
+
+        return node;
+    };
+
+    /**
      * Create a cc.Sprite at pixel position.
      * @param {cc.Node} parent
      * @param {string}  file

@@ -2,15 +2,10 @@
   {
     "layoutType": "Absolute",
     "name": "root",
-    "width": 873,
-    "height": 643,
     "children": [
       {
         "type": "sprite",
         "name": "sprBg",
-        "width": 873, "height": 643,
-        "horizontalCenter": 0,
-        "verticalCenter": 0,
         "scaleMode": "FILL"
       },
 

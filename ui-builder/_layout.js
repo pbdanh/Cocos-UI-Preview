@@ -426,6 +426,21 @@
         var align = opts.alignItems || 'start';
         var justify = opts.justifyContent || 'start';
         var pad = _parsePadding(opts.padding);
+
+        // Shrink-to-fit: auto-size container from children when size is 0
+        var containerSize = container.getContentSize();
+        if (containerSize.width <= 0 || containerSize.height <= 0) {
+            var totalChildW = 0, maxChildH = 0;
+            for (var m = 0; m < children.length; m++) {
+                var mc = children[m], mcs = mc.getContentSize(), mm = _getMargin(mc);
+                totalChildW += mcs.width + mm.left + mm.right + (m > 0 ? gap : 0);
+                maxChildH = Math.max(maxChildH, mcs.height + mm.top + mm.bottom);
+            }
+            var autoW = containerSize.width > 0 ? containerSize.width : totalChildW + pad.left + pad.right;
+            var autoH = containerSize.height > 0 ? containerSize.height : maxChildH + pad.top + pad.bottom;
+            container.setContentSize(autoW, autoH);
+        }
+
         var parentW = container.getContentSize().width - pad.left - pad.right;
         var parentH = container.getContentSize().height - pad.top - pad.bottom;
 
@@ -555,6 +570,21 @@
         var align = opts.alignItems || 'start';
         var justify = opts.justifyContent || 'start';
         var pad = _parsePadding(opts.padding);
+
+        // Shrink-to-fit: auto-size container from children when size is 0
+        var containerSize = container.getContentSize();
+        if (containerSize.width <= 0 || containerSize.height <= 0) {
+            var totalChildH = 0, maxChildW = 0;
+            for (var m = 0; m < children.length; m++) {
+                var mc = children[m], mcs = mc.getContentSize(), mm = _getMargin(mc);
+                totalChildH += mcs.height + mm.top + mm.bottom + (m > 0 ? gap : 0);
+                maxChildW = Math.max(maxChildW, mcs.width + mm.left + mm.right);
+            }
+            var autoW = containerSize.width > 0 ? containerSize.width : maxChildW + pad.left + pad.right;
+            var autoH = containerSize.height > 0 ? containerSize.height : totalChildH + pad.top + pad.bottom;
+            container.setContentSize(autoW, autoH);
+        }
+
         var parentW = container.getContentSize().width - pad.left - pad.right;
         var parentH = container.getContentSize().height - pad.top - pad.bottom;
 

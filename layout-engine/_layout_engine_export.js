@@ -1,7 +1,14 @@
 /**
  * LayoutEngine — Adaptive Code Export (ES5)
  *
- * Exports computed layout tree as UIBuilder adaptive code.
+ * Generates UIBuilder code directly from JSON tree.
+ * Only requires buildTree() — does NOT require computeLayout().
+ *
+ * Size resolution:
+ *  - Leaf nodes: use explicit width/height from JSON
+ *  - Containers with constraints (left+right, top+bottom): pinEdges computes size synchronously
+ *  - Containers with explicit size: use width/height from JSON
+ *
  * Uses: pinEdges, arrangeAsRow/Column/Grid/Wrap, createBackground.
  * No runtime LayoutEngine required in generated code.
  */
@@ -11,15 +18,16 @@
     if (!LayoutEngine) return;
 
     /**
-     * Export ADAPTIVE UIBuilder code that uses UIBuilder.arrangeAsRow/Column
-     * for responsive layout without runtime LayoutEngine.
+     * Export adaptive UIBuilder code from the raw JSON tree.
+     * Only requires buildTree() to be called first (for node normalization).
+     * Does NOT require computeLayout().
      *
-     * Produces code using:
-     *  - cc.Node / ccui.Layout (ABSOLUTE only) for containers
-     *  - UIBuilder.pinEdges() for constraints
-     *  - UIBuilder.arrangeAsRow/Column() for row/column layout
-     *  - UIBuilder.createBackground() for scaleMode
-     *  - setBackGroundImage() for hybrid container+visual nodes
+     * @param {Object} options
+     * @param {string} options.resourceMapVar — resource variable prefix (e.g., "res_preview")
+     * @param {string} options.layerName — Layer class name (default: "GeneratedLayer")
+     * @param {string} options.indent — tab string (default: 4 spaces)
+     * @param {boolean} options.includeComments — emit // comments (default: true)
+     * @param {boolean} options.wrapInLayer — wrap in cc.Layer.extend (default: true)
      */
     LayoutEngine.prototype.exportAdaptiveCode = function(options) {
         options = options || {};
@@ -34,15 +42,31 @@
 
         var lines = [];
         var indent = '';
-        var refNodes = [];
-        var nodeRefs = [];
+        var buttonNodes = [];   // Button names for callback generation
+        var allNodeVars = [];   // All variable names for _nodes map
+
+        // ── Utility helpers ──
 
         function ln(s) { lines.push(indent + (s || '')); }
         function blank() { lines.push(''); }
         function sanitizeName(name) { return (name || 'node').replace(/[^a-zA-Z0-9_$]/g, '_'); }
         function getResRef(name) { return resVar ? resVar + '.' + sanitizeName(name) : null; }
 
-        // Check if node has pinEdges constraints
+        // ── setContentSize (skips dimensions computed by pinEdges) ──
+
+        function emitSize(varName, node) {
+            var w = Math.round(node.width || 0);
+            var h = Math.round(node.height || 0);
+            // Skip dimension that pinEdges will compute from parent
+            if (node.left !== undefined && node.right !== undefined) w = 0;
+            if (node.top !== undefined && node.bottom !== undefined) h = 0;
+            if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
+            else if (w > 0) ln(varName + '.setContentSize(' + w + ', ' + varName + '.getContentSize().height);');
+            else if (h > 0) ln(varName + '.setContentSize(' + varName + '.getContentSize().width, ' + h + ');');
+        }
+
+        // ── pinEdges ──
+
         function hasPinEdges(node) {
             return node.left !== undefined || node.right !== undefined ||
                    node.top !== undefined || node.bottom !== undefined ||
@@ -50,7 +74,6 @@
                    node.percentX !== undefined || node.percentY !== undefined;
         }
 
-        // Emit pinEdges call
         function emitPinEdges(varName, node) {
             var edges = [];
             if (node.left !== undefined) edges.push('left: ' + node.left);
@@ -66,7 +89,8 @@
             }
         }
 
-        // Build padding string for arrange opts
+        // ── Padding ──
+
         function getPaddingStr(node) {
             if (!node.padding && !node.paddingTop && !node.paddingRight && !node.paddingBottom && !node.paddingLeft) return null;
             if (typeof node.padding === 'number') return '' + node.padding;
@@ -79,7 +103,8 @@
             return '{ top: ' + pt + ', right: ' + pr + ', bottom: ' + pb + ', left: ' + pl + ' }';
         }
 
-        // Emit arrangeAsRow/Column/Grid/Wrap call
+        // ── arrangeAs* calls ──
+
         function emitArrangeCall(varName, node) {
             var layoutType = node.layoutType;
 
@@ -90,8 +115,8 @@
                 if (node.spacingY) gopts.push('spacingY: ' + node.spacingY);
                 if (node.cellWidth) gopts.push('cellWidth: ' + node.cellWidth);
                 if (node.cellHeight) gopts.push('cellHeight: ' + node.cellHeight);
-                var gpadStr = getPaddingStr(node);
-                if (gpadStr) gopts.push('padding: ' + gpadStr);
+                var gpad = getPaddingStr(node);
+                if (gpad) gopts.push('padding: ' + gpad);
                 ln('UIBuilder.arrangeAsGrid(' + varName + ', { ' + gopts.join(', ') + ' });');
                 return;
             }
@@ -99,8 +124,8 @@
             if (layoutType === 'Wrap') {
                 var wopts = [];
                 if (node.gap) wopts.push('gap: ' + node.gap);
-                var wpadStr = getPaddingStr(node);
-                if (wpadStr) wopts.push('padding: ' + wpadStr);
+                var wpad = getPaddingStr(node);
+                if (wpad) wopts.push('padding: ' + wpad);
                 ln('UIBuilder.arrangeAsWrap(' + varName + ', { ' + wopts.join(', ') + ' });');
                 return;
             }
@@ -109,87 +134,83 @@
             var isRow = (node.flexDirection === 'row' || node.flexDirection === 'row-reverse');
             var isReverse = (node.flexDirection === 'row-reverse' || node.flexDirection === 'column-reverse');
             var method = isRow ? 'UIBuilder.arrangeAsRow' : 'UIBuilder.arrangeAsColumn';
-            var opts = [];
-            if (node.gap) opts.push('gap: ' + node.gap);
-            if (node.alignItems) opts.push('alignItems: "' + node.alignItems + '"');
-            if (node.justifyContent) opts.push('justifyContent: "' + node.justifyContent + '"');
-            if (isReverse) opts.push('reverse: true');
-            var padStr = getPaddingStr(node);
-            if (padStr) opts.push('padding: ' + padStr);
-            ln(method + '(' + varName + ', { ' + opts.join(', ') + ' });');
+            var lopts = [];
+            if (node.gap) lopts.push('gap: ' + node.gap);
+            if (node.alignItems) lopts.push('alignItems: "' + node.alignItems + '"');
+            if (node.justifyContent) lopts.push('justifyContent: "' + node.justifyContent + '"');
+            if (isReverse) lopts.push('reverse: true');
+            var lpad = getPaddingStr(node);
+            if (lpad) lopts.push('padding: ' + lpad);
+            ln(method + '(' + varName + ', { ' + lopts.join(', ') + ' });');
         }
 
-        // ══════════════════════════════════════════════════════════
-        //  CREATE NODE HELPER
-        // ══════════════════════════════════════════════════════════
+        // ── Common properties (applied to every node after creation) ──
 
-        function emitCreateNode(varName, type, node, parentVar, w, h) {
-            var name = node.name || node._id || 'node';
-            var anchor = node.anchor || null;
+        function emitCommonProps(varName, node) {
+            if (node.rotation) ln(varName + '.setRotation(' + node.rotation + ');');
+            if (node.opacity !== undefined && node.opacity !== 255) ln(varName + '.setOpacity(' + node.opacity + ');');
+            if (node.visible === false) ln(varName + '.setVisible(false);');
+            if (node.zOrder) ln(varName + '.setLocalZOrder(' + node.zOrder + ');');
+            if (node.scaleX !== undefined && node.scaleX !== 1) ln(varName + '.setScaleX(' + node.scaleX + ');');
+            if (node.scaleY !== undefined && node.scaleY !== 1) ln(varName + '.setScaleY(' + node.scaleY + ');');
 
-            if (type === 'sprite' || type === 'imageView') {
-                var sprRes = getResRef(name);
-                ln('var ' + varName + ' = ' + (sprRes ? 'UIBuilder.sprite(' + sprRes + ')' : 'new cc.Sprite()') + ';');
-                if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
-            } else if (type === 'button') {
-                var btnRes = getResRef(name);
-                ln('var ' + varName + ' = ' + (btnRes ? 'UIBuilder.button(' + btnRes + ')' : 'new ccui.Button()') + ';');
-                ln(varName + '.setPressedActionEnabled(true);');
-                if (node.title) ln(varName + '.setTitleText("' + node.title.replace(/"/g, '\\"') + '");');
-                if (node.titleFontSize) ln(varName + '.setTitleFontSize(' + node.titleFontSize + ');');
-                if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
-                refNodes.push(name);
-            } else if (type === 'label' || type === 'text') {
-                var text = (node.text || 'Text').replace(/"/g, '\\"');
-                var fontSize = node.fontSize || node.titleFontSize || 20;
-                ln('var ' + varName + ' = new cc.LabelTTF("' + text + '", "' + (node.fontName || 'Arial') + '", ' + fontSize + ');');
-                if (node.color) ln(varName + '.setColor(cc.color(' + (node.color.r||0) + ', ' + (node.color.g||0) + ', ' + (node.color.b||0) + '));');
-            } else if (type === 'scale9') {
-                var s9Res = getResRef(name);
-                ln('var ' + varName + ' = new ccui.Scale9Sprite(' + (s9Res || '') + ');');
-                if (node.capInsets) {
-                    var ci = node.capInsets;
-                    ln(varName + '.setCapInsets(cc.rect(' + (ci.left||0) + ', ' + (ci.top||0) + ', ' + (ci.right||0) + ', ' + (ci.bottom||0) + '));');
-                }
-                if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
-            } else if (type === 'progressBar') {
-                var pbRes = getResRef(name);
-                ln('var ' + varName + ' = new cc.ProgressTimer(' + (pbRes ? 'new cc.Sprite(' + pbRes + ')' : 'new cc.Sprite()') + ');');
-                ln(varName + '.setType(cc.ProgressTimer.TYPE_BAR);');
-                var pbDir = node.progressDirection || 'horizontal';
-                if (pbDir === 'vertical') {
-                    ln(varName + '.setMidpoint(cc.p(0, 0));');
-                    ln(varName + '.setBarChangeRate(cc.p(0, 1));');
-                } else {
-                    ln(varName + '.setMidpoint(cc.p(0, 0.5));');
-                    ln(varName + '.setBarChangeRate(cc.p(1, 0));');
-                }
-                var pbVal = node.progressValue !== undefined ? node.progressValue : 100;
-                ln(varName + '.setPercentage(' + pbVal + ');');
-                if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
-            } else {
-                // Generic node
-                ln('var ' + varName + ' = new cc.Node();');
-                if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
-                if (anchor) ln(varName + '.setAnchorPoint(' + anchor[0] + ', ' + anchor[1] + ');');
+            // Percent-based sizing (runtime calculation)
+            if (node.percentWidth !== undefined) {
+                ln(varName + '.setContentSize(' + varName + '.getParent().getContentSize().width * ' + node.percentWidth + ', ' + varName + '.getContentSize().height);');
+            }
+            if (node.percentHeight !== undefined) {
+                ln(varName + '.setContentSize(' + varName + '.getContentSize().width, ' + varName + '.getParent().getContentSize().height * ' + node.percentHeight + ');');
             }
 
-            ln(varName + '.setName("' + name + '");');
-            if (anchor && type !== 'node') ln(varName + '.setAnchorPoint(' + anchor[0] + ', ' + anchor[1] + ');');
-            if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
-            if (hasPinEdges(node)) emitPinEdges(varName, node);
+            // Aspect ratio (runtime calculation)
+            if (node.aspectRatio !== undefined) {
+                var hasH = node.height !== undefined && node.height > 0;
+                ln('(function() {');
+                ln('    var _cs = ' + varName + '.getContentSize();');
+                ln('    if (_cs.width > 0 && (_cs.height === 0 || ' + (!hasH ? 'true' : 'false') + ')) {');
+                ln('        ' + varName + '.setContentSize(_cs.width, _cs.width / ' + node.aspectRatio + ');');
+                ln('    } else if (_cs.height > 0) {');
+                ln('        ' + varName + '.setContentSize(_cs.height * ' + node.aspectRatio + ', _cs.height);');
+                ln('    }');
+                ln('})();');
+            }
+
+            // Size constraints (runtime clamp)
+            if (node.minWidth !== undefined || node.maxWidth !== undefined || node.minHeight !== undefined || node.maxHeight !== undefined) {
+                ln('(function() {');
+                ln('    var _cs = ' + varName + '.getContentSize();');
+                ln('    var _w = _cs.width, _h = _cs.height;');
+                if (node.minWidth !== undefined) ln('    _w = Math.max(_w, ' + node.minWidth + ');');
+                if (node.maxWidth !== undefined) ln('    _w = Math.min(_w, ' + node.maxWidth + ');');
+                if (node.minHeight !== undefined) ln('    _h = Math.max(_h, ' + node.minHeight + ');');
+                if (node.maxHeight !== undefined) ln('    _h = Math.min(_h, ' + node.maxHeight + ');');
+                ln('    ' + varName + '.setContentSize(_w, _h);');
+                ln('})();');
+            }
+
+            // Margin (consumed by arrangeAsRow/Column at runtime)
+            if (node.margin !== undefined) {
+                if (typeof node.margin === 'number') {
+                    ln(varName + '._margin = ' + node.margin + ';');
+                } else {
+                    ln(varName + '._margin = { top: ' + (node.margin.top||0) + ', right: ' + (node.margin.right||0) + ', bottom: ' + (node.margin.bottom||0) + ', left: ' + (node.margin.left||0) + ' };');
+                }
+            }
+
+            // Flex weight (consumed by arrangeAsRow/Column at runtime)
+            if (node.flex !== undefined && node.flex > 0) ln(varName + '._flex = ' + node.flex + ';');
         }
 
         // ══════════════════════════════════════════════════════════
-        //  EXPORT NODE
+        //  EXPORT NODE (recursive)
         // ══════════════════════════════════════════════════════════
 
         function exportNode(node, parentVar) {
-            var name = node.name || node._id || 'node';
+            var name = node.name || 'node';
             var varName = sanitizeName(name);
             var type = node.type || '';
-            var w = Math.round(node.width || node._width || 0);
-            var h = Math.round(node.height || node._height || 0);
+            var w = Math.round(node.width || 0);
+            var h = Math.round(node.height || 0);
             var anchor = node.anchor || null;
             var isRoot = !parentVar;
 
@@ -202,7 +223,7 @@
             var isWrap = node.layoutType === 'Wrap';
             var isScrollView = node.layoutType === 'ScrollView';
 
-            nodeRefs.push(varName);
+            allNodeVars.push(varName);
 
             // ── Comment ──
             if (includeComments && node._comment) {
@@ -226,19 +247,23 @@
             //  CREATE NODE
             // ══════════════════════════════════════════════════════
 
-            if ((type === 'sprite' || type === 'imageView') && (node.scaleMode === 'FILL' || node.scaleMode === 'FIT' || node.scaleMode === 'STRETCH')) {
-                // Background fill/fit sprite
+            if (isRoot) {
+                // Root node — always fullscreen
+                ln('var ' + varName + ' = UIBuilder.createFullScreenLayout(this);');
+                ln(varName + '.setName("' + name + '");');
+
+            } else if ((type === 'sprite' || type === 'imageView') && node.scaleMode) {
+                // Sprite with scaleMode (FILL/FIT/STRETCH) — fills parent
                 var bgRes = getResRef(name);
-                if (bgRes) {
-                    ln('var ' + varName + ' = UIBuilder.createBackground(' + parentVar + ', ' + bgRes + ', "' + node.scaleMode + '");');
-                    ln(varName + '.setName("' + name + '");');
-                } else {
-                    ln('var ' + varName + ' = new cc.Sprite();');
-                    ln(varName + '.setName("' + name + '");');
-                    if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
-                }
-            } else if (isScrollView && !isRoot) {
-                // ScrollView container
+                ln('var ' + varName + ' = ' + (bgRes ? 'UIBuilder.sprite(' + bgRes + ')' : 'new cc.Sprite()') + ';');
+                ln(varName + '.setName("' + name + '");');
+                if (anchor) ln(varName + '.setAnchorPoint(' + anchor[0] + ', ' + anchor[1] + ');');
+                if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
+                ln('UIBuilder.setLayoutSize(' + varName + ', 0, 0, "' + node.scaleMode + '");');
+                if (hasPinEdges(node)) emitPinEdges(varName, node);
+
+            } else if (isScrollView) {
+                // ScrollView
                 ln('var ' + varName + ' = new ccui.ScrollView();');
                 var scrollDir = node.scrollDirection || 'vertical';
                 if (scrollDir === 'horizontal') {
@@ -248,15 +273,16 @@
                 } else {
                     ln(varName + '.setDirection(ccui.ScrollView.DIR_VERTICAL);');
                 }
-                if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
+                emitSize(varName, node);
                 ln(varName + '.setName("' + name + '");');
                 if (node.clipping !== false) ln(varName + '.setClippingEnabled(true);');
                 ln(varName + '.setBounceEnabled(true);');
                 if (anchor) ln(varName + '.setAnchorPoint(' + anchor[0] + ', ' + anchor[1] + ');');
                 if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
                 if (hasPinEdges(node)) emitPinEdges(varName, node);
-            } else if (isContainer && !isRoot) {
-                // Container node
+
+            } else if (isContainer) {
+                // Container node (has layoutType and/or children)
                 var containerRes = getResRef(name);
                 var hasVisualBg = isVisualType && (type === 'sprite' || type === 'imageView' || type === 'scale9');
                 if (hasVisualBg && containerRes) {
@@ -268,70 +294,20 @@
                 } else {
                     ln('var ' + varName + ' = new cc.Node();');
                 }
-                if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
+                emitSize(varName, node);
                 ln(varName + '.setName("' + name + '");');
                 if (anchor) ln(varName + '.setAnchorPoint(' + anchor[0] + ', ' + anchor[1] + ');');
                 if (node.clipping) ln(varName + '.setClippingEnabled(true);');
                 if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
                 if (hasPinEdges(node)) emitPinEdges(varName, node);
-            } else if (isRoot) {
-                ln('var ' + varName + ' = UIBuilder.createFullScreenLayout(this);');
-                ln(varName + '.setName("' + name + '");');
+
             } else {
-                // Leaf visual node
-                emitCreateNode(varName, type, node, parentVar, w, h);
-                // Skip duplicate setName/addChild/pinEdges since emitCreateNode handles them
-                // Go directly to visual properties
-                goto_visual = true;
+                // ── Leaf visual node ──
+                emitLeafNode(varName, type, name, node, parentVar, w, h, anchor);
             }
 
-            // ── Visual properties ──
-            if (node.rotation) ln(varName + '.setRotation(' + node.rotation + ');');
-            if (node.opacity !== undefined && node.opacity !== 255) ln(varName + '.setOpacity(' + node.opacity + ');');
-            if (node.visible === false) ln(varName + '.setVisible(false);');
-            if (node.zOrder) ln(varName + '.setLocalZOrder(' + node.zOrder + ');');
-            if (node.scaleX !== undefined && node.scaleX !== 1) ln(varName + '.setScaleX(' + node.scaleX + ');');
-            if (node.scaleY !== undefined && node.scaleY !== 1) ln(varName + '.setScaleY(' + node.scaleY + ');');
-            // Percent-based sizing
-            if (node.percentWidth !== undefined) ln(varName + '.setContentSize(' + varName + '.getParent().getContentSize().width * ' + node.percentWidth + ', ' + varName + '.getContentSize().height);');
-            if (node.percentHeight !== undefined) ln(varName + '.setContentSize(' + varName + '.getContentSize().width, ' + varName + '.getParent().getContentSize().height * ' + node.percentHeight + ');');
-            // Aspect ratio
-            if (node.aspectRatio !== undefined) {
-                ln('(function() {');
-                ln('    var _cs = ' + varName + '.getContentSize();');
-                ln('    if (_cs.width > 0 && (_cs.height === 0 || ' + (!h ? 'true' : 'false') + ')) {');
-                ln('        ' + varName + '.setContentSize(_cs.width, _cs.width / ' + node.aspectRatio + ');');
-                ln('    } else if (_cs.height > 0) {');
-                ln('        ' + varName + '.setContentSize(_cs.height * ' + node.aspectRatio + ', _cs.height);');
-                ln('    }');
-                ln('})();');
-            }
-            // Size constraints
-            if (node.minWidth !== undefined || node.maxWidth !== undefined || node.minHeight !== undefined || node.maxHeight !== undefined) {
-                ln('(function() {');
-                ln('    var _cs = ' + varName + '.getContentSize();');
-                ln('    var _w = _cs.width, _h = _cs.height;');
-                if (node.minWidth !== undefined) ln('    _w = Math.max(_w, ' + node.minWidth + ');');
-                if (node.maxWidth !== undefined) ln('    _w = Math.min(_w, ' + node.maxWidth + ');');
-                if (node.minHeight !== undefined) ln('    _h = Math.max(_h, ' + node.minHeight + ');');
-                if (node.maxHeight !== undefined) ln('    _h = Math.min(_h, ' + node.maxHeight + ');');
-                ln('    ' + varName + '.setContentSize(_w, _h);');
-                ln('})();');
-            }
-            // Margin
-            if (node.margin !== undefined) {
-                if (typeof node.margin === 'number') {
-                    ln(varName + '._margin = ' + node.margin + ';');
-                } else {
-                    ln(varName + '._margin = { top: ' + (node.margin.top||0) + ', right: ' + (node.margin.right||0) + ', bottom: ' + (node.margin.bottom||0) + ', left: ' + (node.margin.left||0) + ' };');
-                }
-            }
-            // Flex weight
-            if (node.flex !== undefined && node.flex > 0) ln(varName + '._flex = ' + node.flex + ';');
-            // Safe area comments
-            if (node.useSafeArea) ln('// useSafeArea: true');
-            if (node.ignoreSafeArea) ln('// ignoreSafeArea: true');
-
+            // ── Common properties ──
+            emitCommonProps(varName, node);
             blank();
 
             // ── Recurse children ──
@@ -347,23 +323,77 @@
                 blank();
             }
 
-            // ── ScrollView: set inner container size ──
+            // ── ScrollView: arrange inner container ──
             if (isScrollView && hasChildren) {
-                var scrollDir = node.scrollDirection || 'vertical';
-                var scrollGap = node.gap || 0;
-                if (scrollDir === 'vertical' || scrollDir === 'both') {
-                    var svOpts = [];
-                    if (scrollGap) svOpts.push('gap: ' + scrollGap);
-                    ln('UIBuilder.arrangeAsColumn(' + varName + '.getInnerContainer(), { ' + svOpts.join(', ') + ' });');
-                } else {
-                    var svOpts2 = [];
-                    if (scrollGap) svOpts2.push('gap: ' + scrollGap);
-                    ln('UIBuilder.arrangeAsRow(' + varName + '.getInnerContainer(), { ' + svOpts2.join(', ') + ' });');
-                }
+                var svDir = node.scrollDirection || 'vertical';
+                var svGap = node.gap || 0;
+                var svOpts = [];
+                if (svGap) svOpts.push('gap: ' + svGap);
+                var svMethod = (svDir === 'horizontal') ? 'UIBuilder.arrangeAsRow' : 'UIBuilder.arrangeAsColumn';
+                ln(svMethod + '(' + varName + '.getInnerContainer(), { ' + svOpts.join(', ') + ' });');
                 blank();
             }
 
             return varName;
+        }
+
+        // ── Leaf node creation (sprite, button, label, etc.) ──
+
+        function emitLeafNode(varName, type, name, node, parentVar, w, h, anchor) {
+            if (type === 'sprite' || type === 'imageView') {
+                var sprRes = getResRef(name);
+                ln('var ' + varName + ' = ' + (sprRes ? 'UIBuilder.sprite(' + sprRes + ')' : 'new cc.Sprite()') + ';');
+                if (w > 0 && h > 0) ln('UIBuilder.setLayoutSize(' + varName + ', ' + w + ', ' + h + ');');
+
+            } else if (type === 'button') {
+                var btnRes = getResRef(name);
+                ln('var ' + varName + ' = ' + (btnRes ? 'UIBuilder.button(' + btnRes + ')' : 'new ccui.Button()') + ';');
+                if (node.title) ln(varName + '.setTitleText("' + node.title.replace(/"/g, '\\"') + '");');
+                if (node.titleFontSize) ln(varName + '.setTitleFontSize(' + node.titleFontSize + ');');
+                if (w > 0 && h > 0) ln('UIBuilder.setLayoutSize(' + varName + ', ' + w + ', ' + h + ');');
+                buttonNodes.push(name);
+
+            } else if (type === 'label' || type === 'text') {
+                var text = (node.text || 'Text').replace(/"/g, '\\"');
+                var fontSize = node.fontSize || node.titleFontSize || 20;
+                ln('var ' + varName + ' = new cc.LabelTTF("' + text + '", "' + (node.fontName || 'Arial') + '", ' + fontSize + ');');
+                if (node.color) ln(varName + '.setColor(cc.color(' + (node.color.r||0) + ', ' + (node.color.g||0) + ', ' + (node.color.b||0) + '));');
+
+            } else if (type === 'scale9') {
+                var s9Res = getResRef(name);
+                ln('var ' + varName + ' = new ccui.Scale9Sprite(' + (s9Res || '') + ');');
+                if (node.capInsets) {
+                    var ci = node.capInsets;
+                    ln(varName + '.setCapInsets(cc.rect(' + (ci.left||0) + ', ' + (ci.top||0) + ', ' + (ci.right||0) + ', ' + (ci.bottom||0) + '));');
+                }
+                if (w > 0 && h > 0) ln('UIBuilder.setLayoutSize(' + varName + ', ' + w + ', ' + h + ');');
+
+            } else if (type === 'progressBar') {
+                var pbRes = getResRef(name);
+                ln('var ' + varName + ' = new cc.ProgressTimer(' + (pbRes ? 'new cc.Sprite(' + pbRes + ')' : 'new cc.Sprite()') + ');');
+                ln(varName + '.setType(cc.ProgressTimer.TYPE_BAR);');
+                var pbDir = node.progressDirection || 'horizontal';
+                if (pbDir === 'vertical') {
+                    ln(varName + '.setMidpoint(cc.p(0, 0));');
+                    ln(varName + '.setBarChangeRate(cc.p(0, 1));');
+                } else {
+                    ln(varName + '.setMidpoint(cc.p(0, 0.5));');
+                    ln(varName + '.setBarChangeRate(cc.p(1, 0));');
+                }
+                var pbVal = node.progressValue !== undefined ? node.progressValue : 100;
+                ln(varName + '.setPercentage(' + pbVal + ');');
+                if (w > 0 && h > 0) ln('UIBuilder.setLayoutSize(' + varName + ', ' + w + ', ' + h + ');');
+
+            } else {
+                // Unknown type — generic node
+                ln('var ' + varName + ' = new cc.Node();');
+                if (w > 0 && h > 0) ln(varName + '.setContentSize(' + w + ', ' + h + ');');
+            }
+
+            ln(varName + '.setName("' + name + '");');
+            if (anchor) ln(varName + '.setAnchorPoint(' + anchor[0] + ', ' + anchor[1] + ');');
+            if (parentVar) ln(parentVar + '.addChild(' + varName + ');');
+            if (hasPinEdges(node)) emitPinEdges(varName, node);
         }
 
         // ══════════════════════════════════════════════════════════
@@ -373,7 +403,6 @@
         if (wrapInLayer) {
             ln('/**');
             ln(' * ' + layerName + ' — Auto-generated adaptive layout');
-            ln(' * Design: ' + (this._screenWidth || 0) + 'x' + (this._screenHeight || 0));
             ln(' *');
             ln(' * Uses UIBuilder.arrangeAsRow/Column + pinEdges for responsive layout.');
             ln(' * No runtime LayoutEngine required.');
@@ -403,19 +432,19 @@
                 if (includeComments) ln('// Store node references');
                 ln('this._nodes = {');
                 indent = tab + tab + tab;
-                for (var nr = 0; nr < nodeRefs.length; nr++) {
-                    ln(nodeRefs[nr] + ': ' + nodeRefs[nr] + (nr < nodeRefs.length - 1 ? ',' : ''));
+                for (var nr = 0; nr < allNodeVars.length; nr++) {
+                    ln(allNodeVars[nr] + ': ' + allNodeVars[nr] + (nr < allNodeVars.length - 1 ? ',' : ''));
                 }
                 indent = tab + tab;
                 ln('};');
             }
         }
 
-        if (wrapInLayer && refNodes.length > 0) {
+        if (wrapInLayer && buttonNodes.length > 0) {
             blank();
             if (includeComments) ln('// Button callbacks');
-            for (var b = 0; b < refNodes.length; b++) {
-                var bn = refNodes[b];
+            for (var b = 0; b < buttonNodes.length; b++) {
+                var bn = buttonNodes[b];
                 var bv = sanitizeName(bn);
                 ln(bv + '.addClickEventListener(function () {');
                 indent = tab + tab + tab;
@@ -429,13 +458,13 @@
             indent = tab;
             ln('},');
 
-            if (refNodes.length > 0) {
+            if (buttonNodes.length > 0) {
                 blank();
                 if (includeComments) ln('// ── Callbacks ──');
-                for (var cb = 0; cb < refNodes.length; cb++) {
-                    var cbN = refNodes[cb];
+                for (var cb = 0; cb < buttonNodes.length; cb++) {
+                    var cbN = buttonNodes[cb];
                     var mN = '_on' + cbN.charAt(0).toUpperCase() + cbN.slice(1);
-                    var last = (cb === refNodes.length - 1);
+                    var last = (cb === buttonNodes.length - 1);
                     ln(mN + ': function () {');
                     indent = tab + tab;
                     ln('cc.log("' + cbN + ' clicked");');

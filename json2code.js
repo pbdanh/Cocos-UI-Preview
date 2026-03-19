@@ -5,15 +5,13 @@
  * Usage:
  *   node json2code.js --input preview.json
  *   node json2code.js --input preview.json --output PreviewLayer.js --resources res_preview --layer PreviewLayer
- *   node json2code.js --input preview.json --width 873 --height 643 --no-wrap
+ *   node json2code.js --input preview.json --no-wrap
  *
  * Options:
  *   --input, -i      Input JSON file path (required)
  *   --output, -o     Output JS file path (default: stdout)
  *   --resources, -r  Resource map variable name (e.g., "res_preview")
  *   --layer, -l      Layer class name (default: "GeneratedLayer")
- *   --width, -w      Design width (default: 873)
- *   --height, -h     Design height (default: 643)
  *   --no-wrap        Don't wrap in Layer.extend
  *   --no-comments    Skip comments
  */
@@ -35,8 +33,6 @@ var opts = {
     output: null,
     resources: '',
     layer: 'GeneratedLayer',
-    width: 873,
-    height: 643,
     wrap: true,
     comments: true
 };
@@ -48,8 +44,6 @@ for (var i = 0; i < args.length; i++) {
         case '--output': case '-o': opts.output = args[++i]; break;
         case '--resources': case '-r': opts.resources = args[++i]; break;
         case '--layer': case '-l': opts.layer = args[++i]; break;
-        case '--width': case '-w': opts.width = parseInt(args[++i], 10); break;
-        case '--height': case '-h': opts.height = parseInt(args[++i], 10); break;
         case '--no-wrap': opts.wrap = false; break;
         case '--no-comments': opts.comments = false; break;
         case '--help':
@@ -60,8 +54,6 @@ for (var i = 0; i < args.length; i++) {
             console.log('  --output, -o     Output JS file (default: stdout)');
             console.log('  --resources, -r  Resource map variable (e.g., "res_preview")');
             console.log('  --layer, -l      Layer class name (default: "GeneratedLayer")');
-            console.log('  --width, -w      Design width (default: 873)');
-            console.log('  --height, -h     Design height (default: 643)');
             console.log('  --no-wrap        Don\'t wrap in Layer.extend');
             console.log('  --no-comments    Skip comments');
             process.exit(0);
@@ -96,10 +88,10 @@ try {
     process.exit(1);
 }
 
-// Process through LayoutEngine
+// Process through LayoutEngine — only buildTree needed
+// Exporter reads JSON properties directly; pinEdges computes constraint sizes at runtime
 var engine = new LayoutEngine();
 engine.buildTree(jsonData);
-engine.computeLayout(opts.width, opts.height);
 
 // Export adaptive code
 var code = engine.exportAdaptiveCode({
