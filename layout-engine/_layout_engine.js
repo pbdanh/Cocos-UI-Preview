@@ -44,8 +44,8 @@
             // To prevent circular json issues, use non-enumerable property
             Object.defineProperty(node, '_parent', { value: parent, writable: true, configurable: true });
 
-            // Default layoutType to Absolute if not specified
-            if (!node.layoutType) {
+            // Default layoutType to Absolute only if node has children
+            if (!node.layoutType && node.children && node.children.length > 0) {
                 node.layoutType = 'Absolute';
             }
 
@@ -209,13 +209,19 @@
     };
 
     LayoutEngine.prototype._getMargin = function(node) {
-        var m = node.margin || {};
-        var marAll = (typeof node.margin === 'number') ? node.margin : 0;
+        var m = node.margin;
+        if (!m) return { top: 0, bottom: 0, left: 0, right: 0 };
+        if (typeof m === 'number') return { top: m, bottom: m, left: m, right: m };
+        if (Array.isArray(m)) {
+            if (m.length === 1) return { top: m[0], bottom: m[0], left: m[0], right: m[0] };
+            if (m.length === 2) return { top: m[0], bottom: m[0], left: m[1], right: m[1] };
+            if (m.length === 4) return { top: m[0], right: m[1], bottom: m[2], left: m[3] };
+        }
         return {
-            top: m.top || marAll,
-            bottom: m.bottom || marAll,
-            left: m.left || marAll,
-            right: m.right || marAll
+            top: m.top || 0,
+            bottom: m.bottom || 0,
+            left: m.left || 0,
+            right: m.right || 0
         };
     };
 
@@ -243,20 +249,33 @@
 
         if (w === undefined && !isDualPinnedX) {
             if (node.type === 'sprite' || node.type === 'button' || node.type === 'imageView' || node.type === 'scale9' || node.type === 'progressBar') {
-                w = 100;
+                // Nodes with `background` are containers, not leaf visuals — skip default 100
+                if (!node.background || !node.children || node.children.length === 0) {
+                    w = 100;
+                }
             } else if (node.type === 'label' || node.type === 'text') {
                 var str = node.text || node.title || "Text";
                 var fs = node.fontSize || node.titleFontSize || 20;
                 w = str.length * fs * 0.6;
             }
+            // Absolute container with no explicit size fills parent
+            if (w === undefined && node.children && node.children.length > 0 && node.layoutType === 'Absolute') {
+                w = parentW;
+            }
         }
 
         if (h === undefined && !isDualPinnedY) {
             if (node.type === 'sprite' || node.type === 'button' || node.type === 'imageView' || node.type === 'scale9' || node.type === 'progressBar') {
-                h = 100;
+                if (!node.background || !node.children || node.children.length === 0) {
+                    h = 100;
+                }
             } else if (node.type === 'label' || node.type === 'text') {
                 var fs2 = node.fontSize || node.titleFontSize || 20;
                 h = fs2 * 1.2;
+            }
+            // Absolute container with no explicit size fills parent
+            if (h === undefined && node.children && node.children.length > 0 && node.layoutType === 'Absolute') {
+                h = parentH;
             }
         }
 
@@ -326,8 +345,8 @@
                 }
             }
 
-            var sx = node.spacingX || 0;
-            var sy = node.spacingY || 0;
+            var sx = node.spacingX || node.gap || 0;
+            var sy = node.spacingY || node.gap || 0;
 
             var gridTotalW = pad.left + pad.right + (cols * cw) + Math.max(0, cols - 1) * sx;
             var gridTotalH = pad.top + pad.bottom + (rows * ch) + Math.max(0, rows - 1) * sy;
@@ -413,10 +432,17 @@
         if (node.minHeight !== undefined) node._height = Math.max(node._height, node.minHeight);
         if (node.maxHeight !== undefined) node._height = Math.min(node._height, node.maxHeight);
 
+        // P1 fix: Use computed _width/_height instead of raw JSON width/height
+        // This allows aspectRatio to work with constraint-stretched dimensions
         if (node.aspectRatio !== undefined && node.aspectRatio > 0) {
-            if (node.width !== undefined && node.height === undefined) {
+            var hasExplicitW = node.width !== undefined || node.percentWidth !== undefined ||
+                (node.left !== undefined && node.right !== undefined);
+            var hasExplicitH = node.height !== undefined || node.percentHeight !== undefined ||
+                (node.top !== undefined && node.bottom !== undefined);
+
+            if (hasExplicitW && !hasExplicitH && node._width > 0) {
                 node._height = node._width / node.aspectRatio;
-            } else if (node.height !== undefined && node.width === undefined) {
+            } else if (hasExplicitH && !hasExplicitW && node._height > 0) {
                 node._width = node._height * node.aspectRatio;
             }
         }
@@ -538,12 +564,8 @@
 
             var extraSpace = availableMain - totalContentMain;
 
-            // For reverse directions, swap 'start' and 'end' justify behavior
+            // Reverse: only reverses array order, does NOT swap justify
             var effectiveJustify = justifyContent;
-            if (isReverse) {
-                if (justifyContent === 'start') effectiveJustify = 'end';
-                else if (justifyContent === 'end') effectiveJustify = 'start';
-            }
 
             var cursor = isRow ? pad.left : (H - pad.top);
             var spaceBetweenGap = 0;
@@ -570,10 +592,13 @@
                     cLeft = cursor;
                     var crossSpace = H - pad.top - pad.bottom - m.top - m.bottom - c._height;
 
-                    if (alignItems === 'start') cBottom = H - pad.top - m.top - c._height;
-                    else if (alignItems === 'end') cBottom = pad.bottom + m.bottom;
-                    else if (alignItems === 'center') cBottom = pad.bottom + m.bottom + crossSpace / 2;
-                    else if (alignItems === 'stretch') {
+                    // P3: alignSelf overrides parent alignItems per-child
+                    // Cocos convention: start=bottom (Y=0), end=top (Y=H)
+                    var childAlign = c.alignSelf || alignItems;
+                    if (childAlign === 'start') cBottom = pad.bottom + m.bottom;
+                    else if (childAlign === 'end') cBottom = H - pad.top - m.top - c._height;
+                    else if (childAlign === 'center') cBottom = pad.bottom + m.bottom + crossSpace / 2;
+                    else if (childAlign === 'stretch') {
                         cBottom = pad.bottom + m.bottom;
                         c._height = H - pad.top - pad.bottom - m.top - m.bottom;
                     }
@@ -587,10 +612,12 @@
                     cBottom = cursor - c._height;
                     var crossSpace = W - pad.left - pad.right - m.left - m.right - c._width;
 
-                    if (alignItems === 'start') cLeft = pad.left + m.left;
-                    else if (alignItems === 'end') cLeft = W - pad.right - m.right - c._width;
-                    else if (alignItems === 'center') cLeft = pad.left + m.left + crossSpace / 2;
-                    else if (alignItems === 'stretch') {
+                    // P3: alignSelf overrides parent alignItems per-child
+                    var childAlign = c.alignSelf || alignItems;
+                    if (childAlign === 'start') cLeft = pad.left + m.left;
+                    else if (childAlign === 'end') cLeft = W - pad.right - m.right - c._width;
+                    else if (childAlign === 'center') cLeft = pad.left + m.left + crossSpace / 2;
+                    else if (childAlign === 'stretch') {
                         cLeft = pad.left + m.left;
                         c._width = W - pad.left - pad.right - m.left - m.right;
                     }
@@ -606,15 +633,15 @@
             var cols = node.columns || 3;
             var cw = node.cellWidth || 0;
             var ch = node.cellHeight || 0;
-            if (cw === 0) cw = (W - pad.left - pad.right) / cols;
-            if (ch === 0 && visCount > 0) {
+            if ((cw === 0 || ch === 0) && visCount > 0) {
                 for (var i = 0; i < visCount; i++) {
-                    ch = Math.max(ch, visChildren[i]._height);
+                    if (cw === 0) cw = Math.max(cw, visChildren[i]._width);
+                    if (ch === 0) ch = Math.max(ch, visChildren[i]._height);
                 }
             }
 
-            var sx = node.spacingX || 0;
-            var sy = node.spacingY || 0;
+            var sx = node.spacingX || node.gap || 0;
+            var sy = node.spacingY || node.gap || 0;
 
             for (var i = 0; i < visCount; i++) {
                 var c = visChildren[i];
@@ -744,6 +771,22 @@
                 }
                 child._scaleX = uniformScale;
                 child._scaleY = uniformScale;
+            }
+
+            // P0 fix: Auto-center sprite in parent when scaleMode is set
+            // Only if no explicit positioning constraints were given
+            var hasExplicitPosX = child.left !== undefined || child.right !== undefined ||
+                child.horizontalCenter !== undefined || child.percentX !== undefined;
+            var hasExplicitPosY = child.top !== undefined || child.bottom !== undefined ||
+                child.verticalCenter !== undefined || child.percentY !== undefined;
+
+            if (!hasExplicitPosX) {
+                cLeft = (targetW - child._width) / 2;
+                child._x = cLeft + child._width * anchor[0];
+            }
+            if (!hasExplicitPosY) {
+                cBottom = (targetH - child._height) / 2;
+                child._y = cBottom + child._height * anchor[1];
             }
         }
 

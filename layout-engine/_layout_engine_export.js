@@ -112,7 +112,9 @@
                 var gopts = [];
                 if (node.columns) gopts.push('columns: ' + node.columns);
                 if (node.spacingX) gopts.push('spacingX: ' + node.spacingX);
+                else if (node.gap) gopts.push('spacingX: ' + node.gap);
                 if (node.spacingY) gopts.push('spacingY: ' + node.spacingY);
+                else if (node.gap) gopts.push('spacingY: ' + node.gap);
                 if (node.cellWidth) gopts.push('cellWidth: ' + node.cellWidth);
                 if (node.cellHeight) gopts.push('cellHeight: ' + node.cellHeight);
                 var gpad = getPaddingStr(node);
@@ -192,6 +194,8 @@
             if (node.margin !== undefined) {
                 if (typeof node.margin === 'number') {
                     ln(varName + '._margin = ' + node.margin + ';');
+                } else if (Array.isArray(node.margin)) {
+                    ln(varName + '._margin = ' + JSON.stringify(node.margin) + ';');
                 } else {
                     ln(varName + '._margin = { top: ' + (node.margin.top||0) + ', right: ' + (node.margin.right||0) + ', bottom: ' + (node.margin.bottom||0) + ', left: ' + (node.margin.left||0) + ' };');
                 }
@@ -199,6 +203,9 @@
 
             // Flex weight (consumed by arrangeAsRow/Column at runtime)
             if (node.flex !== undefined && node.flex > 0) ln(varName + '._flex = ' + node.flex + ';');
+
+            // alignSelf (consumed by arrangeAsRow/Column at runtime)
+            if (node.alignSelf) ln(varName + '._alignSelf = "' + node.alignSelf + '";');
         }
 
         // ══════════════════════════════════════════════════════════
@@ -217,7 +224,9 @@
             var isVisualType = (type === 'sprite' || type === 'button' || type === 'imageView'
                 || type === 'scale9' || type === 'label' || type === 'text' || type === 'progressBar');
             var hasChildren = node.children && node.children.length > 0;
-            var isContainer = !!node.layoutType && (!isVisualType || hasChildren);
+            var hasBgProp = !!node.background;
+            // A node is a container if: it has layoutType AND (not visual, or has children, or has background prop)
+            var isContainer = (!!node.layoutType || hasBgProp || hasChildren) && (!isVisualType || hasChildren || hasBgProp);
             var isLinear = node.layoutType === 'Linear';
             var isGrid = node.layoutType === 'Grid';
             var isWrap = node.layoutType === 'Wrap';
@@ -282,13 +291,16 @@
                 if (hasPinEdges(node)) emitPinEdges(varName, node);
 
             } else if (isContainer) {
-                // Container node (has layoutType and/or children)
+                // Container node (has layoutType/children/background)
+                var bgType = node.background || '';
                 var containerRes = getResRef(name);
-                var hasVisualBg = isVisualType && (type === 'sprite' || type === 'imageView' || type === 'scale9');
+                // Support both new `background` property and legacy `type + children` combo
+                var hasVisualBg = bgType === 'sprite' || bgType === 'scale9' || bgType === 'imageView'
+                    || (isVisualType && hasChildren && (type === 'sprite' || type === 'imageView' || type === 'scale9'));
                 if (hasVisualBg && containerRes) {
                     ln('var ' + varName + ' = new ccui.Layout();');
                     ln(varName + '.setBackGroundImage(' + containerRes + ');');
-                    if (type === 'scale9') {
+                    if (bgType === 'scale9' || type === 'scale9') {
                         ln(varName + '.setBackGroundImageScale9Enabled(true);');
                     }
                 } else {

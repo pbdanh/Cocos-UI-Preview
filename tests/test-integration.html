@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Integration Test — Engine vs UIBuilder Runtime</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', sans-serif; background: #1e1e1e; color: #d4d4d4; padding: 20px; }
+h1 { color: #4fc3f7; margin-bottom: 10px; }
+.summary { font-size: 18px; margin: 10px 0 20px; padding: 12px; border-radius: 6px; }
+.summary.pass { background: rgba(76,175,80,0.2); border: 1px solid #4caf50; }
+.summary.fail { background: rgba(244,67,54,0.2); border: 1px solid #f44336; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 16px; font-size: 13px; }
+th { background: #333; padding: 6px 10px; text-align: left; border: 1px solid #555; }
+td { padding: 5px 10px; border: 1px solid #444; }
+.pass-cell { color: #4caf50; }
+.fail-cell { color: #f44336; font-weight: bold; }
+.test-title { color: #ffb74d; font-weight: bold; }
+.error { color: #f44336; background: rgba(244,67,54,0.1); padding: 10px; border-radius: 4px; margin: 10px 0; font-family: monospace; white-space: pre-wrap; }
+.category { color: #ce93d8; font-size: 20px; margin: 24px 0 8px; border-bottom: 1px solid #555; padding-bottom: 4px; }
+</style>
+</head>
+<body>
+<h1>🧪 Integration Test — Engine vs UIBuilder Runtime</h1>
+<div id="summary">Loading...</div>
+<div id="results"></div>
+
+<!-- ═══ Mock cc/ccui ═══ -->
+<script>
+window.cc = window.cc || {};
+window.ccui = window.ccui || {};
+cc.p = function(x,y) { return {x:x,y:y}; };
+cc.color = function(r,g,b,a) { return {r:r,g:g,b:b,a:a||255}; };
+cc.rect = function(x,y,w,h) { return {x:x,y:y,width:w,height:h}; };
+cc.size = function(w,h) { return {width:w,height:h}; };
+cc.Layer = function() {};
+cc.Node = function() {};
+cc.Sprite = function() {};
+cc.LabelTTF = function() {};
+cc.ProgressTimer = function() {};
+ccui.Layout = function() {};
+ccui.Button = function() {};
+ccui.ScrollView = function() {};
+ccui.ScrollView.DIR_VERTICAL = 0;
+ccui.ScrollView.DIR_HORIZONTAL = 1;
+ccui.ScrollView.DIR_BOTH = 2;
+ccui.ListView = function() {};
+ccui.PageView = function() {};
+ccui.Scale9Sprite = function() {};
+ccui.Layout.ABSOLUTE = 0;
+
+window.UIBuilder = window.UIBuilder || {};
+UIBuilder._applyOpts = function() {};
+UIBuilder.sprite = function() { return new cc.Sprite(); };
+
+// ═══ MockNode ═══
+function MockNode(w, h) {
+    this._size = { width: w || 0, height: h || 0 };
+    this._pos  = { x: 0, y: 0 };
+    this._anchor = { x: 0.5, y: 0.5 };
+    this._children = [];
+    this._name = '';
+    this._margin = undefined;
+    this._flex = undefined;
+    this._alignSelf = undefined;
+    this._visible = true;
+}
+MockNode.prototype.getContentSize = function() { return {width: this._size.width, height: this._size.height}; };
+MockNode.prototype.setContentSize = function(w, h) {
+    if (typeof w === 'object') { this._size.width = w.width; this._size.height = w.height; }
+    else { this._size.width = w; this._size.height = h; }
+};
+MockNode.prototype.getPosition = function() { return {x: this._pos.x, y: this._pos.y}; };
+MockNode.prototype.setPosition = function(x, y) {
+    if (typeof x === 'object') { this._pos.x = x.x; this._pos.y = x.y; }
+    else { this._pos.x = x; this._pos.y = y; }
+};
+MockNode.prototype.getAnchorPoint = function() { return {x: this._anchor.x, y: this._anchor.y}; };
+MockNode.prototype.setAnchorPoint = function(x, y) { this._anchor.x = x; this._anchor.y = y; };
+MockNode.prototype.getChildren = function() { return this._children; };
+MockNode.prototype.addChild = function(c) { this._children.push(c); };
+MockNode.prototype.setName = function(n) { this._name = n; };
+MockNode.prototype.getName = function() { return this._name; };
+MockNode.prototype.isVisible = function() { return this._visible; };
+MockNode.prototype.setVisible = function(v) { this._visible = v; };
+MockNode.prototype.getParent = function() { return null; };
+MockNode.prototype.setLocalZOrder = function() {};
+MockNode.prototype.setScale = function(s) { this._scaleX = s; this._scaleY = s; };
+MockNode.prototype.setScaleX = function(s) { this._scaleX = s; };
+MockNode.prototype.setScaleY = function(s) { this._scaleY = s; };
+MockNode.prototype.getScaleX = function() { return this._scaleX || 1; };
+MockNode.prototype.getScaleY = function() { return this._scaleY || 1; };
+MockNode.prototype.setRotation = function() {};
+MockNode.prototype.setOpacity = function() {};
+</script>
+
+<!-- ═══ Load engine + runtime ═══ -->
+<script src="../layout-engine/_layout_engine.js"></script>
+<script src="../ui-builder/_layout.js"></script>
+
+<script>
+try {
+
+var TOLERANCE = 1.5;
+var totalTests = 0, passedTests = 0, failedTests = 0;
+var resultsHTML = '';
+
+function approxEq(a, b) { return Math.abs(a - b) <= TOLERANCE; }
+
+// ═══ Engine: build tree + compute layout → flatten to {name: {x,y,w,h}} ═══
+function runEngine(json) {
+    var engine = new LayoutEngine();
+    engine.buildTree(json);
+    var rootW = engine._root.width || 0;
+    var rootH = engine._root.height || 0;
+    engine.computeLayout(rootW, rootH);
+    return engine._root;
+}
+
+function flattenEngine(node, out) {
+    out = out || {};
+    if (node.name) {
+        out[node.name] = {
+            x: node._x, y: node._y, w: node._width, h: node._height,
+            sx: node._scaleX || 1, sy: node._scaleY || 1
+        };
+    }
+    if (node.children) {
+        for (var i = 0; i < node.children.length; i++) {
+            flattenEngine(node.children[i], out);
+        }
+    }
+    return out;
+}
+
+// ═══ Runtime: MockNode container + UIBuilder arrange ═══
+function runRuntime(layout, parentW, parentH) {
+    var container = new MockNode(parentW, parentH);
+    container.setName('container');
+    var children = layout.children || [];
+
+    for (var i = 0; i < children.length; i++) {
+        var c = children[i];
+        var child = new MockNode(c.width || 100, c.height || 100);
+        child.setName(c.name || 'child_' + i);
+        if (c.anchor) child.setAnchorPoint(c.anchor[0], c.anchor[1]);
+        if (c.margin !== undefined) child._margin = c.margin;
+        if (c.flex !== undefined) child._flex = c.flex;
+        if (c.alignSelf !== undefined) child._alignSelf = c.alignSelf;
+        container.addChild(child);
+    }
+
+    var opts = {};
+    if (layout.gap !== undefined) opts.gap = layout.gap;
+    if (layout.alignItems) opts.alignItems = layout.alignItems;
+    if (layout.justifyContent) opts.justifyContent = layout.justifyContent;
+    if (layout.padding) opts.padding = layout.padding;
+
+    var dir = layout.flexDirection || 'row';
+    if (layout.layoutType === 'Grid') {
+        opts.columns = layout.columns;
+        if (layout.spacingX !== undefined) opts.spacingX = layout.spacingX;
+        else if (layout.gap !== undefined) { opts.spacingX = layout.gap; opts.spacingY = layout.gap; }
+        if (layout.spacingY !== undefined) opts.spacingY = layout.spacingY;
+        UIBuilder.arrangeAsGrid(container, opts);
+    } else if (layout.layoutType === 'Wrap') {
+        UIBuilder.arrangeAsWrap(container, opts);
+    } else if (dir === 'column' || dir === 'column-reverse') {
+        if (dir === 'column-reverse') opts.reverse = true;
+        UIBuilder.arrangeAsColumn(container, opts);
+    } else {
+        if (dir === 'row-reverse') opts.reverse = true;
+        UIBuilder.arrangeAsRow(container, opts);
+    }
+
+    var results = {};
+    var mocks = container.getChildren();
+    for (var i = 0; i < mocks.length; i++) {
+        var mc = mocks[i];
+        var pos = mc.getPosition();
+        var size = mc.getContentSize();
+        results[mc.getName()] = { x: pos.x, y: pos.y, w: size.width, h: size.height };
+    }
+    return results;
+}
+
+// ═══ Engine for scaleMode tests: wrap in root + Absolute parent ═══
+function runEngineScaleMode(parentW, parentH, childSpec) {
+    var json = [{
+        name: 'root', width: parentW, height: parentH,
+        children: [childSpec]
+    }];
+    var engine = new LayoutEngine();
+    engine.buildTree(json);
+    engine.computeLayout(parentW, parentH);
+    var flat = flattenEngine(engine._root);
+    return flat;
+}
+
+// ═══ Reporting ═══
+function compareAndReport(testName, enginePos, runtimePos, childNames, extraCols) {
+    totalTests++;
+    var rows = '';
+    var allPass = true;
+    var cols = ['x', 'y', 'w', 'h'];
+    if (extraCols) cols = cols.concat(extraCols);
+
+    for (var i = 0; i < childNames.length; i++) {
+        var name = childNames[i];
+        var eng = enginePos[name];
+        var rt = runtimePos[name];
+        if (!eng || !rt) {
+            rows += '<tr><td>' + name + '</td><td colspan="' + cols.length + '" class="fail-cell">MISSING (eng=' + !!eng + ' rt=' + !!rt + ')</td></tr>';
+            allPass = false;
+            continue;
+        }
+        var cells = '';
+        for (var ci = 0; ci < cols.length; ci++) {
+            var k = cols[ci];
+            var eV = eng[k] !== undefined ? eng[k] : 0;
+            var rV = rt[k] !== undefined ? rt[k] : 0;
+            var ok = approxEq(eV, rV);
+            if (!ok) allPass = false;
+            var cls = ok ? 'pass-cell' : 'fail-cell';
+            cells += '<td class="' + cls + '">' + eV.toFixed(1) + ' / ' + rV.toFixed(1) + (ok ? ' ✅' : ' ❌ Δ' + Math.abs(eV-rV).toFixed(1)) + '</td>';
+        }
+        rows += '<tr><td>' + name + '</td>' + cells + '</tr>';
+    }
+
+    if (allPass) passedTests++; else failedTests++;
+    var icon = allPass ? '✅' : '❌';
+    resultsHTML += '<h2 style="color:' + (allPass ? '#81c784' : '#e57373') + '; margin:14px 0 6px; font-size:15px;">' + icon + ' Test ' + totalTests + ': <span class="test-title">' + testName + '</span></h2>';
+    var thLabels = cols.map(function(c) { return c.toUpperCase() + ' (eng/rt)'; });
+    resultsHTML += '<table><tr><th>Node</th>' + thLabels.map(function(l) { return '<th>' + l + '</th>'; }).join('') + '</tr>' + rows + '</table>';
+}
+
+function compareScaleMode(testName, enginePos, expected, childNames) {
+    totalTests++;
+    var rows = '';
+    var allPass = true;
+    var cols = ['x', 'y', 'w', 'h', 'sx', 'sy'];
+
+    for (var i = 0; i < childNames.length; i++) {
+        var name = childNames[i];
+        var eng = enginePos[name];
+        var exp = expected[name];
+        if (!eng || !exp) {
+            rows += '<tr><td>' + name + '</td><td colspan="6" class="fail-cell">MISSING</td></tr>';
+            allPass = false;
+            continue;
+        }
+        var cells = '';
+        for (var ci = 0; ci < cols.length; ci++) {
+            var k = cols[ci];
+            var eV = eng[k] !== undefined ? eng[k] : (k === 'sx' || k === 'sy' ? 1 : 0);
+            var xV = exp[k] !== undefined ? exp[k] : (k === 'sx' || k === 'sy' ? 1 : 0);
+            var ok = approxEq(eV, xV);
+            if (!ok) allPass = false;
+            var cls = ok ? 'pass-cell' : 'fail-cell';
+            cells += '<td class="' + cls + '">' + eV.toFixed(2) + ' / ' + xV.toFixed(2) + (ok ? ' ✅' : ' ❌ Δ' + Math.abs(eV-xV).toFixed(2)) + '</td>';
+        }
+        rows += '<tr><td>' + name + '</td>' + cells + '</tr>';
+    }
+
+    if (allPass) passedTests++; else failedTests++;
+    var icon = allPass ? '✅' : '❌';
+    resultsHTML += '<h2 style="color:' + (allPass ? '#81c784' : '#e57373') + '; margin:14px 0 6px; font-size:15px;">' + icon + ' Test ' + totalTests + ': <span class="test-title">' + testName + '</span></h2>';
+    resultsHTML += '<table><tr><th>Node</th><th>X (eng/exp)</th><th>Y (eng/exp)</th><th>W (eng/exp)</th><th>H (eng/exp)</th><th>ScaleX (eng/exp)</th><th>ScaleY (eng/exp)</th></tr>' + rows + '</table>';
+}
+
+// Wrap child in Absolute parent for engine
+function makeEngineJSON(pW, pH, layout) {
+    var copy = JSON.parse(JSON.stringify(layout));
+    copy.width = pW;
+    copy.height = pH;
+    copy.name = 'container';
+    return [{ name: 'root', width: pW, height: pH, children: [copy] }];
+}
+
+function addCategory(title) {
+    resultsHTML += '<div class="category">' + title + '</div>';
+}
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CATEGORY 1: LINEAR ROW — Alignment & Justify              ║
+// ╚══════════════════════════════════════════════════════════════╝
+addCategory('📐 Linear Row — Alignment & Justify');
+
+// T1: Row, gap + alignItems=center
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 10, alignItems: 'center',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 40 },
+            { type: 'sprite', name: 'b', width: 80, height: 30 },
+            { type: 'sprite', name: 'c', width: 50, height: 50 }
+        ]
+    };
+    var PW = 400, PH = 100;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — gap=10, alignItems=center', ep, rp, ['a','b','c']);
+})();
+
+// T2: Row, alignItems=start (bottom in Cocos)
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 5, alignItems: 'start',
+        children: [
+            { type: 'sprite', name: 'a', width: 40, height: 40 },
+            { type: 'sprite', name: 'b', width: 60, height: 20 },
+            { type: 'sprite', name: 'c', width: 50, height: 50 }
+        ]
+    };
+    var PW = 300, PH = 80;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — alignItems=start (bottom)', ep, rp, ['a','b','c']);
+})();
+
+// T3: Row, alignItems=end (top in Cocos)
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 5, alignItems: 'end',
+        children: [
+            { type: 'sprite', name: 'a', width: 40, height: 40 },
+            { type: 'sprite', name: 'b', width: 60, height: 20 },
+            { type: 'sprite', name: 'c', width: 50, height: 50 }
+        ]
+    };
+    var PW = 300, PH = 80;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — alignItems=end (top)', ep, rp, ['a','b','c']);
+})();
+
+// T4: Row, alignItems=stretch
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 10, alignItems: 'stretch',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30 },
+            { type: 'sprite', name: 'b', width: 80, height: 20 }
+        ]
+    };
+    var PW = 300, PH = 100;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — alignItems=stretch', ep, rp, ['a','b']);
+})();
+
+// T5: Row, justifyContent=center
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 10, justifyContent: 'center',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 40 },
+            { type: 'sprite', name: 'b', width: 80, height: 40 }
+        ]
+    };
+    var PW = 400, PH = 60;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — justifyContent=center', ep, rp, ['a','b']);
+})();
+
+// T6: Row, justifyContent=end
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 10, justifyContent: 'end',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 40 },
+            { type: 'sprite', name: 'b', width: 80, height: 40 }
+        ]
+    };
+    var PW = 400, PH = 60;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — justifyContent=end', ep, rp, ['a','b']);
+})();
+
+// T7: Row, justifyContent=spaceBetween
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', justifyContent: 'spaceBetween',
+        children: [
+            { type: 'sprite', name: 'a', width: 50, height: 30 },
+            { type: 'sprite', name: 'b', width: 60, height: 30 },
+            { type: 'sprite', name: 'c', width: 40, height: 30 }
+        ]
+    };
+    var PW = 400, PH = 50;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — justifyContent=spaceBetween', ep, rp, ['a','b','c']);
+})();
+
+// T8: Row, justifyContent=spaceAround
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', justifyContent: 'spaceAround',
+        children: [
+            { type: 'sprite', name: 'a', width: 50, height: 30 },
+            { type: 'sprite', name: 'b', width: 60, height: 30 },
+            { type: 'sprite', name: 'c', width: 40, height: 30 }
+        ]
+    };
+    var PW = 400, PH = 50;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — justifyContent=spaceAround', ep, rp, ['a','b','c']);
+})();
+
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CATEGORY 2: LINEAR ROW — Flex, AlignSelf, Margins          ║
+// ╚══════════════════════════════════════════════════════════════╝
+addCategory('🔧 Linear Row — Flex, AlignSelf, Margins, Padding');
+
+// T9: Row, alignSelf=end on child[1]
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 5, alignItems: 'start',
+        children: [
+            { type: 'sprite', name: 'a', width: 40, height: 40 },
+            { type: 'sprite', name: 'b', width: 40, height: 30, alignSelf: 'end' },
+            { type: 'sprite', name: 'c', width: 40, height: 50 }
+        ]
+    };
+    var PW = 300, PH = 80;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — alignSelf=end on child[1]', ep, rp, ['a','b','c']);
+})();
+
+// T10: Row, alignSelf=center on child[0]
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 5, alignItems: 'start',
+        children: [
+            { type: 'sprite', name: 'a', width: 40, height: 30, alignSelf: 'center' },
+            { type: 'sprite', name: 'b', width: 50, height: 50 }
+        ]
+    };
+    var PW = 200, PH = 80;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — alignSelf=center on child[0]', ep, rp, ['a','b']);
+})();
+
+// T11: Row, flex weights (1:2)
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 0, alignItems: 'start',
+        children: [
+            { type: 'sprite', name: 'a', width: 50, height: 40 },
+            { type: 'sprite', name: 'b', width: 0, height: 40, flex: 1 },
+            { type: 'sprite', name: 'c', width: 0, height: 40, flex: 2 }
+        ]
+    };
+    var PW = 350, PH = 60;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — flex weights (1:2)', ep, rp, ['a','b','c']);
+})();
+
+// T12: Row, padding=[10,20]
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 5, alignItems: 'center',
+        padding: [10, 20],
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30 },
+            { type: 'sprite', name: 'b', width: 60, height: 30 }
+        ]
+    };
+    var PW = 300, PH = 100;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — padding=[10,20]', ep, rp, ['a','b']);
+})();
+
+// T13: Row, padding=[5,10,15,20]
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 5, alignItems: 'start',
+        padding: [5, 10, 15, 20],
+        children: [
+            { type: 'sprite', name: 'a', width: 40, height: 30 },
+            { type: 'sprite', name: 'b', width: 50, height: 40 }
+        ]
+    };
+    var PW = 300, PH = 80;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — padding=[5,10,15,20]', ep, rp, ['a','b']);
+})();
+
+// T14: Row, child margins
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 0, alignItems: 'start',
+        children: [
+            { type: 'sprite', name: 'a', width: 50, height: 40, margin: [5, 10] },
+            { type: 'sprite', name: 'b', width: 50, height: 40, margin: { top: 0, right: 5, bottom: 0, left: 15 } }
+        ]
+    };
+    var PW = 300, PH = 80;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — child margins', ep, rp, ['a','b']);
+})();
+
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CATEGORY 3: LINEAR COLUMN — Basic                          ║
+// ╚══════════════════════════════════════════════════════════════╝
+addCategory('📏 Linear Column — Alignment & Justify');
+
+// T15: Column, spaceBetween
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column', justifyContent: 'spaceBetween',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30 },
+            { type: 'sprite', name: 'b', width: 80, height: 40 },
+            { type: 'sprite', name: 'c', width: 50, height: 20 }
+        ]
+    };
+    var PW = 200, PH = 300;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Column — justifyContent=spaceBetween', ep, rp, ['a','b','c']);
+})();
+
+// T16: Column, alignItems=center
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column', gap: 10, alignItems: 'center',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30 },
+            { type: 'sprite', name: 'b', width: 100, height: 40 },
+            { type: 'sprite', name: 'c', width: 40, height: 20 }
+        ]
+    };
+    var PW = 200, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Column — alignItems=center', ep, rp, ['a','b','c']);
+})();
+
+// T17: Column, alignItems=end
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column', gap: 10, alignItems: 'end',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30 },
+            { type: 'sprite', name: 'b', width: 100, height: 40 },
+            { type: 'sprite', name: 'c', width: 40, height: 20 }
+        ]
+    };
+    var PW = 200, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Column — alignItems=end', ep, rp, ['a','b','c']);
+})();
+
+// T18: Column, alignItems=stretch
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column', gap: 10, alignItems: 'stretch',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30 },
+            { type: 'sprite', name: 'b', width: 80, height: 40 }
+        ]
+    };
+    var PW = 200, PH = 150;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Column — alignItems=stretch', ep, rp, ['a','b']);
+})();
+
+// T19: Column, justifyContent=center
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column', gap: 5, justifyContent: 'center',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30 },
+            { type: 'sprite', name: 'b', width: 60, height: 40 }
+        ]
+    };
+    var PW = 200, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Column — justifyContent=center', ep, rp, ['a','b']);
+})();
+
+// T20: Column, justifyContent=end
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column', gap: 5, justifyContent: 'end',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30 },
+            { type: 'sprite', name: 'b', width: 60, height: 40 }
+        ]
+    };
+    var PW = 200, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Column — justifyContent=end', ep, rp, ['a','b']);
+})();
+
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CATEGORY 4: LINEAR COLUMN — Advanced                       ║
+// ╚══════════════════════════════════════════════════════════════╝
+addCategory('🔧 Linear Column — Flex, AlignSelf, Margins');
+
+// T21: Column, flex weights (1:3)
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column', gap: 0, alignItems: 'start',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30 },
+            { type: 'sprite', name: 'b', width: 60, height: 0, flex: 1 },
+            { type: 'sprite', name: 'c', width: 60, height: 0, flex: 3 }
+        ]
+    };
+    var PW = 200, PH = 300;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Column — flex weights (1:3)', ep, rp, ['a','b','c']);
+})();
+
+// T22: Column, alignSelf=end
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column', gap: 5, alignItems: 'start',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30, alignSelf: 'end' },
+            { type: 'sprite', name: 'b', width: 80, height: 40 },
+            { type: 'sprite', name: 'c', width: 50, height: 20 }
+        ]
+    };
+    var PW = 200, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Column — alignSelf=end on child[0]', ep, rp, ['a','b','c']);
+})();
+
+// T23: Column, child margins
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column', gap: 0, alignItems: 'start',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30, margin: [10, 5] },
+            { type: 'sprite', name: 'b', width: 80, height: 40, margin: 8 }
+        ]
+    };
+    var PW = 200, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Column — child margins', ep, rp, ['a','b']);
+})();
+
+// T24: Column, padding + alignItems=center
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column', gap: 5, alignItems: 'center',
+        padding: [15, 10],
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30 },
+            { type: 'sprite', name: 'b', width: 80, height: 40 }
+        ]
+    };
+    var PW = 200, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Column — padding=[15,10] + center', ep, rp, ['a','b']);
+})();
+
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CATEGORY 5: REVERSE DIRECTIONS                             ║
+// ╚══════════════════════════════════════════════════════════════╝
+addCategory('🔄 Reverse Directions');
+
+// T25: row-reverse
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row-reverse', gap: 10, alignItems: 'center',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 40 },
+            { type: 'sprite', name: 'b', width: 80, height: 30 },
+            { type: 'sprite', name: 'c', width: 50, height: 50 }
+        ]
+    };
+    var PW = 400, PH = 100;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row-reverse — gap=10, center', ep, rp, ['a','b','c']);
+})();
+
+// T26: column-reverse
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column-reverse', gap: 10, alignItems: 'center',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30 },
+            { type: 'sprite', name: 'b', width: 80, height: 40 },
+            { type: 'sprite', name: 'c', width: 50, height: 20 }
+        ]
+    };
+    var PW = 200, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Column-reverse — gap=10, center', ep, rp, ['a','b','c']);
+})();
+
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CATEGORY 6: GRID                                           ║
+// ╚══════════════════════════════════════════════════════════════╝
+addCategory('📊 Grid Layouts');
+
+// T27: Grid columns=3, gap=10
+(function() {
+    var layout = {
+        layoutType: 'Grid', columns: 3, gap: 10,
+        children: [
+            { type: 'sprite', name: 'g1', width: 50, height: 50 },
+            { type: 'sprite', name: 'g2', width: 50, height: 50 },
+            { type: 'sprite', name: 'g3', width: 50, height: 50 },
+            { type: 'sprite', name: 'g4', width: 50, height: 50 },
+            { type: 'sprite', name: 'g5', width: 50, height: 50 }
+        ]
+    };
+    var PW = 200, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Grid — columns=3, gap=10', ep, rp, ['g1','g2','g3','g4','g5']);
+})();
+
+// T28: Grid columns=2, no gap
+(function() {
+    var layout = {
+        layoutType: 'Grid', columns: 2, gap: 0,
+        children: [
+            { type: 'sprite', name: 'g1', width: 80, height: 40 },
+            { type: 'sprite', name: 'g2', width: 80, height: 40 },
+            { type: 'sprite', name: 'g3', width: 80, height: 40 },
+            { type: 'sprite', name: 'g4', width: 80, height: 40 }
+        ]
+    };
+    var PW = 200, PH = 120;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Grid — columns=2, gap=0', ep, rp, ['g1','g2','g3','g4']);
+})();
+
+// T29: Grid with different spacingX/spacingY
+(function() {
+    var layout = {
+        layoutType: 'Grid', columns: 2, spacingX: 20, spacingY: 5,
+        children: [
+            { type: 'sprite', name: 'g1', width: 60, height: 40 },
+            { type: 'sprite', name: 'g2', width: 60, height: 40 },
+            { type: 'sprite', name: 'g3', width: 60, height: 40 },
+            { type: 'sprite', name: 'g4', width: 60, height: 40 }
+        ]
+    };
+    var PW = 200, PH = 120;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Grid — columns=2, spacingX=20, spacingY=5', ep, rp, ['g1','g2','g3','g4']);
+})();
+
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CATEGORY 7: WRAP                                           ║
+// ╚══════════════════════════════════════════════════════════════╝
+addCategory('🔁 Wrap Layouts');
+
+// T30: Wrap at 180px
+(function() {
+    var layout = {
+        layoutType: 'Wrap', gap: 5,
+        children: [
+            { type: 'sprite', name: 'w1', width: 80, height: 30 },
+            { type: 'sprite', name: 'w2', width: 80, height: 30 },
+            { type: 'sprite', name: 'w3', width: 80, height: 30 },
+            { type: 'sprite', name: 'w4', width: 80, height: 30 }
+        ]
+    };
+    var PW = 180, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Wrap — wrapping at 180px', ep, rp, ['w1','w2','w3','w4']);
+})();
+
+// T31: Wrap with varied sizes
+(function() {
+    var layout = {
+        layoutType: 'Wrap', gap: 10,
+        children: [
+            { type: 'sprite', name: 'w1', width: 60, height: 40 },
+            { type: 'sprite', name: 'w2', width: 100, height: 30 },
+            { type: 'sprite', name: 'w3', width: 50, height: 50 },
+            { type: 'sprite', name: 'w4', width: 70, height: 35 },
+            { type: 'sprite', name: 'w5', width: 40, height: 45 }
+        ]
+    };
+    var PW = 200, PH = 300;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Wrap — varied sizes', ep, rp, ['w1','w2','w3','w4','w5']);
+})();
+
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CATEGORY 8: SPRITE / SCALE MODE (engine-only tests)        ║
+// ╚══════════════════════════════════════════════════════════════╝
+addCategory('🖼️ Sprite ScaleMode (Engine-only)');
+
+// T32: scaleMode=FILL — centers and scales uniformly to cover parent
+(function() {
+    var childSpec = {
+        type: 'sprite', name: 'sprBg', width: 200, height: 150, scaleMode: 'FILL'
+    };
+    var PW = 400, PH = 300;
+    var ep = runEngineScaleMode(PW, PH, childSpec);
+    // FILL: scale = max(400/200, 300/150) = 2, centered
+    var expected = {
+        sprBg: { x: 200, y: 150, w: 200, h: 150, sx: 2, sy: 2 }
+    };
+    compareScaleMode('scaleMode=FILL — 200x150 in 400x300 parent', ep, expected, ['sprBg']);
+})();
+
+// T33: scaleMode=FILL — non-proportional parent
+(function() {
+    var childSpec = {
+        type: 'sprite', name: 'sprBg', width: 300, height: 200, scaleMode: 'FILL'
+    };
+    var PW = 600, PH = 300;
+    var ep = runEngineScaleMode(PW, PH, childSpec);
+    // FILL: scale = max(600/300, 300/200) = max(2, 1.5) = 2
+    var expected = {
+        sprBg: { x: 300, y: 150, w: 300, h: 200, sx: 2, sy: 2 }
+    };
+    compareScaleMode('scaleMode=FILL — 300x200 in 600x300', ep, expected, ['sprBg']);
+})();
+
+// T34: scaleMode=FIT
+(function() {
+    var childSpec = {
+        type: 'sprite', name: 'sprFit', width: 200, height: 150, scaleMode: 'FIT'
+    };
+    var PW = 400, PH = 200;
+    var ep = runEngineScaleMode(PW, PH, childSpec);
+    // FIT: scale = min(400/200, 200/150) = min(2, 1.333) = 1.333
+    var expected = {
+        sprFit: { x: 200, y: 100, w: 200, h: 150, sx: 1.333, sy: 1.333 }
+    };
+    compareScaleMode('scaleMode=FIT — 200x150 in 400x200', ep, expected, ['sprFit']);
+})();
+
+// T35: scaleMode=STRETCH
+(function() {
+    var childSpec = {
+        type: 'sprite', name: 'sprStretch', width: 100, height: 80, scaleMode: 'STRETCH'
+    };
+    var PW = 300, PH = 200;
+    var ep = runEngineScaleMode(PW, PH, childSpec);
+    // STRETCH: scaleX = 300/100 = 3, scaleY = 200/80 = 2.5
+    var expected = {
+        sprStretch: { x: 150, y: 100, w: 100, h: 80, sx: 3, sy: 2.5 }
+    };
+    compareScaleMode('scaleMode=STRETCH — 100x80 in 300x200', ep, expected, ['sprStretch']);
+})();
+
+// T36: scaleMode=FILL — landscape sprite in portrait parent
+(function() {
+    var childSpec = {
+        type: 'sprite', name: 'sprWide', width: 400, height: 200, scaleMode: 'FILL'
+    };
+    var PW = 300, PH = 400;
+    var ep = runEngineScaleMode(PW, PH, childSpec);
+    // FILL: scale = max(300/400, 400/200) = max(0.75, 2) = 2
+    var expected = {
+        sprWide: { x: 150, y: 200, w: 400, h: 200, sx: 2, sy: 2 }
+    };
+    compareScaleMode('scaleMode=FILL — landscape 400x200 in portrait 300x400', ep, expected, ['sprWide']);
+})();
+
+// T37: scaleMode=FIT — landscape sprite in portrait parent
+(function() {
+    var childSpec = {
+        type: 'sprite', name: 'sprFit2', width: 400, height: 200, scaleMode: 'FIT'
+    };
+    var PW = 300, PH = 400;
+    var ep = runEngineScaleMode(PW, PH, childSpec);
+    // FIT: scale = min(300/400, 400/200) = min(0.75, 2) = 0.75
+    var expected = {
+        sprFit2: { x: 150, y: 200, w: 400, h: 200, sx: 0.75, sy: 0.75 }
+    };
+    compareScaleMode('scaleMode=FIT — landscape 400x200 in portrait 300x400', ep, expected, ['sprFit2']);
+})();
+
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDER RESULTS
+// ═══════════════════════════════════════════════════════════════
+var summaryEl = document.getElementById('summary');
+var allPassed = failedTests === 0;
+summaryEl.className = 'summary ' + (allPassed ? 'pass' : 'fail');
+summaryEl.innerHTML = (allPassed ? '✅' : '❌') + ' <strong>' + passedTests + '/' + totalTests + ' tests passed</strong>' +
+    (failedTests > 0 ? ' — <strong>' + failedTests + ' failed</strong>' : '') +
+    ' (tolerance: ±' + TOLERANCE + 'px)';
+document.getElementById('results').innerHTML = resultsHTML;
+
+} catch (e) {
+    document.getElementById('summary').innerHTML = '<div class="error">ERROR: ' + e.message + '\n\nStack: ' + (e.stack || 'N/A') + '</div>';
+}
+</script>
+</body>
+</html>

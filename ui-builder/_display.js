@@ -88,6 +88,7 @@
         if (w <= 0 && h <= 0) return node;
 
         var origSize = node.getContentSize();
+        var scaledSprite = false;
 
         // For sprites/images: scale texture to fit layout size
         if ((node instanceof cc.Sprite || node instanceof ccui.ImageView) &&
@@ -96,24 +97,26 @@
             var sy = h > 0 ? h / origSize.height : Infinity;
 
             if (scaleMode === 'FILL') {
-                // Cover: use larger scale (may crop)
                 var s = Math.max(sx, sy);
                 node.setScale(s);
             } else if (scaleMode === 'STRETCH') {
-                // Stretch: non-uniform (may distort)
                 if (sx === Infinity) sx = 1;
                 if (sy === Infinity) sy = 1;
                 node.setScaleX(sx);
                 node.setScaleY(sy);
+            } else if (scaleMode) {
+                // FIT (default when scaleMode is set)
+                var s = Math.min(sx, sy);
+                if (s === Infinity) s = 1;
+                node.setScale(s);
             } else {
-                // FIT (default): use smaller scale (no distortion, no crop)
+                // No scaleMode: uniform scale to FIT
                 var s = Math.min(sx, sy);
                 if (s === Infinity) s = 1;
                 node.setScale(s);
             }
+            scaledSprite = true;
         }
-        // Sprite with no texture loaded (empty): just use target size as-is
-        // Texture will be loaded later; call setLayoutSize again after loading if needed
 
         // Center sprite within its layout bounds when using scaleMode
         if (scaleMode && w > 0 && h > 0) {
@@ -121,8 +124,13 @@
             node.setPosition(w / 2, h / 2);
         }
 
-        // Always set content size for layout calculations
-        if (w > 0 && h > 0) {
+        // Set content size for layout calculations
+        // IMPORTANT: Skip for scaleMode sprites — their original texture contentSize
+        // is the correct base for anchor/position math. setScale handles visual sizing.
+        // Calling setContentSize here would make worldBounds = newSize * scale (too large).
+        if (scaleMode && scaledSprite) {
+            // Don't override contentSize — scale already handles visual sizing
+        } else if (w > 0 && h > 0) {
             node.setContentSize(w, h);
         } else if (w > 0) {
             node.setContentSize(w, origSize.height);

@@ -199,6 +199,8 @@
         body.dragover #drop-zone { display: flex; }
     </style>
     <script src="layout-engine/_layout_engine.js?v=999"></script>
+    <script src="layout-engine/_layout_engine_tools.js?v=999"></script>
+    <script src="layout-engine/_layout_engine_export.js?v=999"></script>
 </head>
 <body>
 
@@ -470,7 +472,9 @@
 
         function createDOMNode(node) {
             const el = document.createElement('div');
-            el.className = `c-node c-${node.type}`;
+            // Use container class for nodes with `background` property
+            const cssType = (node.background && node.children) ? 'layout' : (node.type || 'node');
+            el.className = `c-node c-${cssType}`;
             el.id = `node-${node._id}`;
             
             // Cocos coordinates: origin is bottom-left, anchors are 0-1
@@ -598,6 +602,8 @@
             if (node.type === 'row' || node.type === 'column') icon = '☷';
             if (node.type === 'scale9') icon = '🔲';
             if (node.type === 'progressBar') icon = '📊';
+            // Container with background property
+            if (node.background && node.children) icon = '🖼️📐';
             if (node.layoutType === 'ScrollView') icon = '📜';
             if (node.visible === false) icon = '👁️‍🗨️';
 

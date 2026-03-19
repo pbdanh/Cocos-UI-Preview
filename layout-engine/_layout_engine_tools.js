@@ -94,6 +94,49 @@
                     message: 'ScrollView without clipping — content may overflow visually.' });
             }
 
+            // 10. Position constraints inside Linear parent (silently ignored)
+            if (node._parent && node._parent.layoutType === 'Linear') {
+                var posProps = [];
+                if (node.left !== undefined) posProps.push('left');
+                if (node.right !== undefined) posProps.push('right');
+                if (node.top !== undefined) posProps.push('top');
+                if (node.bottom !== undefined) posProps.push('bottom');
+                if (node.horizontalCenter !== undefined) posProps.push('horizontalCenter');
+                if (node.verticalCenter !== undefined) posProps.push('verticalCenter');
+                if (posProps.length > 0) {
+                    issues.push({ level: 'warning', nodeId: id,
+                        message: 'Position constraints [' + posProps.join(', ') + '] on child inside Linear parent — these are ignored. Use margin, flex, or alignSelf instead.' });
+                }
+            }
+
+            // 11. justifyContent/alignItems on Absolute layout (no effect)
+            if (node.layoutType === 'Absolute') {
+                if (node.justifyContent) {
+                    issues.push({ level: 'warning', nodeId: id,
+                        message: 'justifyContent="' + node.justifyContent + '" on Absolute layout has no effect. Use position constraints (left/right/top/bottom) instead.' });
+                }
+                if (node.alignItems) {
+                    issues.push({ level: 'warning', nodeId: id,
+                        message: 'alignItems="' + node.alignItems + '" on Absolute layout has no effect. Use position constraints instead.' });
+                }
+            }
+
+            // 12. alignSelf outside Linear parent
+            if (node.alignSelf) {
+                var parentLayout = node._parent ? node._parent.layoutType : '';
+                if (parentLayout !== 'Linear') {
+                    issues.push({ level: 'warning', nodeId: id,
+                        message: 'alignSelf="' + node.alignSelf + '" but parent layout is "' + parentLayout + '" (not Linear) — will be ignored.' });
+                }
+            }
+
+            // 13. Suggest `background` property for visual containers
+            var visualTypes = ['sprite', 'imageView', 'scale9'];
+            if (node.type && visualTypes.indexOf(node.type) >= 0 && node.children && node.children.length > 0 && !node.background && !node.scaleMode) {
+                issues.push({ level: 'info', nodeId: id,
+                    message: 'Node has type="' + node.type + '" with children. Consider using "background": "' + node.type + '" instead for clearer node role.' });
+            }
+
             // Recurse
             if (node.children) {
                 for (var c = 0; c < node.children.length; c++) {

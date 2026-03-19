@@ -397,11 +397,17 @@
     /**
      * Get a child's margin as { top, right, bottom, left }.
      * Reads from child._margin (set by code gen) or defaults to 0.
+     * Supports: number, [v,h], [t,r,b,l], or {top,right,bottom,left}.
      */
     function _getMargin(child) {
         var m = child._margin;
         if (!m) return { top: 0, right: 0, bottom: 0, left: 0 };
         if (typeof m === 'number') return { top: m, right: m, bottom: m, left: m };
+        if (Array.isArray(m)) {
+            if (m.length === 1) return { top: m[0], right: m[0], bottom: m[0], left: m[0] };
+            if (m.length === 2) return { top: m[0], right: m[1], bottom: m[0], left: m[1] };
+            if (m.length === 4) return { top: m[0], right: m[1], bottom: m[2], left: m[3] };
+        }
         return { top: m.top || 0, right: m.right || 0, bottom: m.bottom || 0, left: m.left || 0 };
     }
 
@@ -522,7 +528,8 @@
             x += margin.left;
 
             // Stretch cross-axis
-            if (align === 'stretch') {
+            var childAlign = child._alignSelf || align;
+            if (childAlign === 'stretch') {
                 var stretchH = parentH - margin.top - margin.bottom;
                 child.setContentSize(cs.width, stretchH);
                 cs = child.getContentSize();
@@ -533,11 +540,11 @@
 
             // Cross axis (Y)
             var posY;
-            if (align === 'center') {
+            if (childAlign === 'center') {
                 posY = pad.bottom + parentH / 2 + (anchor.y - 0.5) * cs.height;
-            } else if (align === 'end') {
+            } else if (childAlign === 'end') {
                 posY = pad.bottom + parentH - margin.top - cs.height * (1 - anchor.y);
-            } else if (align === 'stretch') {
+            } else if (childAlign === 'stretch') {
                 posY = pad.bottom + margin.bottom + cs.height * anchor.y;
             } else {
                 // start (bottom)
@@ -666,7 +673,8 @@
             y -= margin.top;
 
             // Stretch cross-axis
-            if (align === 'stretch') {
+            var childAlign = child._alignSelf || align;
+            if (childAlign === 'stretch') {
                 var stretchW = parentW - margin.left - margin.right;
                 child.setContentSize(stretchW, cs.height);
                 cs = child.getContentSize();
@@ -677,11 +685,11 @@
 
             // Cross axis (X)
             var posX;
-            if (align === 'center') {
+            if (childAlign === 'center') {
                 posX = pad.left + parentW / 2 + (anchor.x - 0.5) * cs.width;
-            } else if (align === 'end') {
+            } else if (childAlign === 'end') {
                 posX = pad.left + parentW - margin.right - cs.width * (1 - anchor.x);
-            } else if (align === 'stretch') {
+            } else if (childAlign === 'stretch') {
                 posX = pad.left + margin.left + cs.width * anchor.x;
             } else {
                 // start (left)
