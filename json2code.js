@@ -15,16 +15,18 @@
  *   --width, -w      Design width (default: 873)
  *   --height, -h     Design height (default: 643)
  *   --no-wrap        Don't wrap in Layer.extend
- *   --no-anims       Skip animations
  *   --no-comments    Skip comments
  */
 
 var fs = require('fs');
 var path = require('path');
 
-// Load LayoutEngine (single source of truth)
-var enginePath = path.join(__dirname, 'ui-builder', '_layout_engine.js');
+// Load LayoutEngine (core + export)
+var enginePath = path.join(__dirname, 'layout-engine', '_layout_engine.js');
 var LayoutEngine = require(enginePath);
+
+// Load export module (adds exportAdaptiveCode to prototype)
+require(path.join(__dirname, 'layout-engine', '_layout_engine_export.js'));
 
 // Parse CLI arguments
 var args = process.argv.slice(2);
@@ -36,7 +38,6 @@ var opts = {
     width: 873,
     height: 643,
     wrap: true,
-    anims: true,
     comments: true
 };
 
@@ -50,9 +51,7 @@ for (var i = 0; i < args.length; i++) {
         case '--width': case '-w': opts.width = parseInt(args[++i], 10); break;
         case '--height': case '-h': opts.height = parseInt(args[++i], 10); break;
         case '--no-wrap': opts.wrap = false; break;
-        case '--no-anims': opts.anims = false; break;
         case '--no-comments': opts.comments = false; break;
-        case '--adaptive': break; // accepted for backward compat, always adaptive
         case '--help':
             console.log('Usage: node json2code.js --input <file.json> [options]');
             console.log('');
@@ -64,7 +63,6 @@ for (var i = 0; i < args.length; i++) {
             console.log('  --width, -w      Design width (default: 873)');
             console.log('  --height, -h     Design height (default: 643)');
             console.log('  --no-wrap        Don\'t wrap in Layer.extend');
-            console.log('  --no-anims       Skip animations');
             console.log('  --no-comments    Skip comments');
             process.exit(0);
             break;
@@ -108,7 +106,6 @@ var code = engine.exportAdaptiveCode({
     resourceMapVar: opts.resources,
     layerName: opts.layer,
     wrapInLayer: opts.wrap,
-    includeAnimations: opts.anims,
     includeComments: opts.comments
 });
 

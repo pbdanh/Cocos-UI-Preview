@@ -1,12 +1,22 @@
 # Đặc tả JSON Schema cho Hệ thống Sinh Giao Diện UI
 
-Bản tóm tắt này đóng vai trò như một bộ **Nguyên tắc Thiết kế (Design Guidelines)** dành riêng cho AI Agent. Mục tiêu là giúp AI xuất ra file định dạng JSON tối ưu nhất, sạch nhất, chỉ tập trung vào cấu trúc (Structure) và bố cục (Layout), tận dụng toàn bộ sức mạnh tự động hóa của hàm [computeLayout](file:///d:/ws/Cocos-UI-Preview/ui-builder/_layout_engine.js#104-137) có sẵn trong môi trường Preview.
+Bản tóm tắt này đóng vai trò như một bộ **Nguyên tắc Thiết kế (Design Guidelines)** dành riêng cho AI Agent. Mục tiêu là giúp AI xuất ra file định dạng JSON tối ưu nhất, sạch nhất, chỉ tập trung vào cấu trúc (Structure) và bố cục (Layout), tận dụng toàn bộ sức mạnh tự động hóa của hàm `computeLayout` trong `_layout_engine.js`.
+
+---
+
+## Kiến trúc Module
+
+| Module | Chức năng |
+|--------|--------|
+| `_layout_engine.js` | Core: `buildTree`, `computeLayout`, `getNodeBounds`, `getRenderOrder` |
+| `_layout_engine_export.js` | `exportAdaptiveCode()` — sinh code UIBuilder |
+| `_layout_engine_tools.js` | Dev tools: `validate()`, `setNodeProp()`, `diffLayout()` |
 
 ---
 
 ## 1. Mục tiêu và Nguyên tắc Thiết kế
 - **Tập trung Hình Thái Nội Dung (Static Layout):** AI đóng vai trò thao tác cắt layout HTML/CSS cơ bản: khai báo loại Node, chia Flexbox, căn lề Absolute.
-- **Để Máy Lọc Tính Toán Pixel:** Thuật toán [computeLayout](file:///d:/ws/Cocos-UI-Preview/ui-builder/_layout_engine.js#104-137) nội bộ sẽ lo hoàn toàn việc đong đếm tọa độ `px` tĩnh và tính tỉ lệ đa màn hình (Multi-resolution).
+- **Để Máy Lọc Tính Toán Pixel:** Thuật toán `computeLayout` nội bộ sẽ lo hoàn toàn việc đong đếm tọa độ `px` tĩnh và tính tỉ lệ đa màn hình (Multi-resolution).
 - **Loại bỏ Logic Hành Vi:** Mọi xử lý State (Hover/Click), Data Binding, và **Animation** (hoạt ảnh) sẽ được Lập trình viên lập trình (Code) bổ sung ở giai đoạn tiếp nối. JSON gốc phải hoàn toàn "tĩnh".
 
 ---

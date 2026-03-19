@@ -9,7 +9,7 @@ Guide for writing JSON files for the Layout Engine. A JSON file describes a UI n
   {
     "layoutType": "Absolute",
     "name": "root",
-    "w": 720, "h": 1280,
+    "width": 720, "height": 1280,
     "useSafeArea": true,
     "children": [...]
   }
@@ -17,7 +17,7 @@ Guide for writing JSON files for the Layout Engine. A JSON file describes a UI n
 ```
 
 - File is an **array** containing 1 root node (or a single root object directly)
-- Root node accepts `w`/`h` but the engine overrides them with screen size during compute
+- Root node accepts `width`/`height` but the engine overrides them with screen size during compute
 - `name` is **required** — used as the ID for lookup (`getNodeBounds("name")`)
 
 ---
@@ -30,20 +30,16 @@ Guide for writing JSON files for the Layout Engine. A JSON file describes a UI n
 |----------|------|-------------|
 | `name` | string | **Required.** Unique node ID |
 | `type` | string | Render type: `"sprite"`, `"button"`, `"label"`, `"text"`, `"imageView"`, `"scale9"`, `"progressBar"` |
-| `layoutType` | string | Layout for children: `"Absolute"`, `"Linear"`, `"Grid"`, `"Wrap"`, `"ScrollView"` |
+| `layoutType` | string | **Required** layout for children: `"Absolute"`, `"Linear"`, `"Grid"`, `"Wrap"`, `"ScrollView"` |
 
-> **If `layoutType` is omitted**, the engine infers it:
-> - `type: "row"` → `Linear` + `flexDirection: "row"`
-> - `type: "column"` → `Linear` + `flexDirection: "column"`
-> - `type: "grid"` → `Grid`
-> - Default → `Absolute`
+> **`layoutType` is always required.** If omitted, defaults to `"Absolute"`.
 
 ### Sizing
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `w` or `width` | number | Width in pixels |
-| `h` or `height` | number | Height in pixels |
+| `width` | number | Width in pixels |
+| `height` | number | Height in pixels |
 | `percentWidth` | 0.0–1.0 | Width = parent.width × percentWidth |
 | `percentHeight` | 0.0–1.0 | Height = parent.height × percentHeight |
 | `minWidth` | number | Minimum width |
@@ -68,8 +64,6 @@ Used in **Absolute layout parents**. Coordinate origin is **bottom-left** (Cocos
 | `verticalCenter` | number | Offset from vertical center (0 = exact center) |
 | `percentX` | 0.0–1.0 | Anchor point positioned at parentW × percentX |
 | `percentY` | 0.0–1.0 | Anchor point positioned at parentH × percentY |
-| `x` | number | Absolute x position (legacy, prefer constraints) |
-| `y` | number | Absolute y position (legacy, prefer constraints) |
 
 #### Constraint Combinations
 
@@ -156,7 +150,7 @@ Children are positioned using constraints (`left/right/top/bottom/horizontalCent
   "left": 0, "right": 0, "top": 0, "bottom": 0,
   "children": [
     { "type": "sprite", "name": "bg", "left": 0, "right": 0, "top": 0, "bottom": 0 },
-    { "type": "button", "name": "btn", "horizontalCenter": 0, "verticalCenter": 0, "w": 200, "h": 60 }
+    { "type": "button", "name": "btn", "horizontalCenter": 0, "verticalCenter": 0, "width": 200, "height": 60 }
   ]
 }
 ```
@@ -214,8 +208,8 @@ Arranges children in a grid layout.
   "horizontalCenter": 0,
   "top": 500,
   "children": [
-    { "type": "button", "name": "skill1", "title": "🔥", "w": 60, "h": 60 },
-    { "type": "button", "name": "skill2", "title": "❄️", "w": 60, "h": 60 }
+    { "type": "button", "name": "skill1", "title": "🔥", "width": 60, "height": 60 },
+    { "type": "button", "name": "skill2", "title": "❄️", "width": 60, "height": 60 }
   ]
 }
 ```
@@ -235,9 +229,9 @@ Like a row, but automatically wraps to the next line when space runs out.
   "left": 10, "right": 10, "top": 100,
   "gap": 8,
   "children": [
-    { "type": "button", "name": "tag1", "title": "RPG", "w": 80, "h": 30 },
-    { "type": "button", "name": "tag2", "title": "Action", "w": 100, "h": 30 },
-    { "type": "button", "name": "tag3", "title": "Adventure", "w": 120, "h": 30 }
+    { "type": "button", "name": "tag1", "title": "RPG", "width": 80, "height": 30 },
+    { "type": "button", "name": "tag2", "title": "Action", "width": 100, "height": 30 },
+    { "type": "button", "name": "tag3", "title": "Adventure", "width": 120, "height": 30 }
   ]
 }
 ```
@@ -262,9 +256,9 @@ Scrollable content area. Children are laid out like a column or row.
   "top": 300, "height": 200,
   "gap": 8,
   "children": [
-    { "type": "button", "name": "item1", "title": "Item 1", "w": 300, "h": 60 },
-    { "type": "button", "name": "item2", "title": "Item 2", "w": 300, "h": 60 },
-    { "type": "button", "name": "item3", "title": "Item 3", "w": 300, "h": 60 }
+    { "type": "button", "name": "item1", "title": "Item 1", "width": 300, "height": 60 },
+    { "type": "button", "name": "item2", "title": "Item 2", "width": 300, "height": 60 },
+    { "type": "button", "name": "item3", "title": "Item 3", "width": 300, "height": 60 }
   ]
 }
 ```
@@ -287,7 +281,7 @@ Applied on a child node. Scales relative to the parent's size.
 {
   "type": "sprite",
   "name": "background",
-  "w": 720, "h": 1280,
+  "width": 720, "height": 1280,
   "horizontalCenter": 0, "verticalCenter": 0,
   "scaleMode": "FILL"
 }
@@ -327,78 +321,26 @@ Applied on a child node. Scales relative to the parent's size.
 
 ---
 
-## Animations
+## Metadata
 
-Each node can have animations defined as keyframes.
+### Developer Comments
 
-### Shorthand (intro/loop/exit)
-
-```json
-{
-  "type": "button", "name": "btn",
-  "w": 100, "h": 50,
-  "intro": {
-    "prop": "opacity",
-    "from": 0, "to": 255,
-    "duration": 500,
-    "easing": "easeOut"
-  },
-  "loop": {
-    "prop": "scaleX",
-    "from": 1, "to": 1.1,
-    "duration": 1000,
-    "yoyo": true
-  }
-}
-```
-
-### Full animations array
+Use `_comment` to annotate nodes. Exported code will include these as comment lines.
 
 ```json
 {
-  "animations": [
-    {
-      "prop": "y",
-      "from": -100, "to": 0,
-      "duration": 800,
-      "delay": 200,
-      "easing": "easeOutCubic",
-      "sequence": "intro"
-    },
-    {
-      "prop": "rotation",
-      "from": 0, "to": 360,
-      "duration": 2000,
-      "sequence": "loop",
-      "repeat": -1
-    }
-  ]
+  "type": "sprite",
+  "name": "bg",
+  "_comment": "Full-screen background with cave theme",
+  "scaleMode": "FILL"
 }
 ```
-
-### Animation Properties
-
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `prop` | string | "opacity" | Target property: `x`, `y`, `scaleX`, `scaleY`, `rotation`, `opacity`, `width`, `height` |
-| `from` | number | current | Start value (undefined = use current value) |
-| `to` | number | — | End value |
-| `duration` | ms | 300 | Duration |
-| `delay` | ms | 0 | Delay before start |
-| `easing` | string | "linear" | Easing function |
-| `sequence` | string | "intro" | `"intro"`, `"loop"`, `"exit"` |
-| `repeat` | number | 1 | Repeat count (-1 = infinite). Loop sequences default to -1 |
-| `yoyo` | boolean | false | Reverse direction on each repeat |
-
-### Available Easings
-
-`linear`, `easeIn`, `easeOut`, `easeInOut`, `easeInCubic`, `easeOutCubic`, `easeInOutCubic`, `bounce`, `elastic`, `backIn`, `backOut`
 
 ---
 
 ## Best Practices for Multi-Resolution
 
-1. **Root**: Always set `useSafeArea: true` and `w`/`h` to your design resolution
+1. **Root**: Always set `useSafeArea: true` and `width`/`height` to your design resolution
 2. **Background**: Use `horizontalCenter: 0, verticalCenter: 0` + `scaleMode: "FILL"` (avoid fixed x/y)
 3. **Header/Footer**: Use `left: 0, right: 0` + `top: 0`/`bottom: 0` + `ignoreSafeArea: true` to pin flush to edges
 4. **Content panels**: Use `left/right` constraints with `top` pixel offset, or `percentHeight`
@@ -412,12 +354,12 @@ Each node can have animations defined as keyframes.
   {
     "layoutType": "Absolute",
     "name": "root",
-    "w": 720, "h": 1280,
+    "width": 720, "height": 1280,
     "useSafeArea": true,
     "children": [
       {
         "type": "sprite", "name": "bg",
-        "w": 720, "h": 1280,
+        "width": 720, "height": 1280,
         "horizontalCenter": 0, "verticalCenter": 0,
         "scaleMode": "FILL"
       },
@@ -444,11 +386,25 @@ Each node can have animations defined as keyframes.
         "height": 80, "ignoreSafeArea": true,
         "bottom": 0, "left": 0, "right": 0,
         "children": [
-          { "type": "button", "name": "tab1", "title": "Home", "w": 80, "h": 60 },
-          { "type": "button", "name": "tab2", "title": "Shop", "w": 80, "h": 60 }
+          { "type": "button", "name": "tab1", "title": "Home", "width": 80, "height": 60 },
+          { "type": "button", "name": "tab2", "title": "Shop", "width": 80, "height": 60 }
         ]
       }
     ]
   }
 ]
 ```
+
+---
+
+## Module Architecture
+
+The Layout Engine is split into focused modules:
+
+| Module | Purpose |
+|--------|---------|
+| `_layout_engine.js` | Core: `buildTree`, `computeLayout`, `getNodeBounds`, `getRenderOrder` |
+| `_layout_engine_export.js` | `exportAdaptiveCode()` — generates UIBuilder code |
+| `_layout_engine_tools.js` | Dev tools: `validate()`, `setNodeProp()`, `diffLayout()`, `snapshotBounds()` |
+
+> **Animations** are NOT part of the JSON schema. They should be handled in developer code after the layout is built.

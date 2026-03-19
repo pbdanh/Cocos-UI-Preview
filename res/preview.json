@@ -2,13 +2,13 @@
   {
     "layoutType": "Absolute",
     "name": "root",
-    "w": 873,
-    "h": 643,
+    "width": 873,
+    "height": 643,
     "children": [
       {
         "type": "sprite",
         "name": "sprBg",
-        "w": 873, "h": 643,
+        "width": 873, "height": 643,
         "horizontalCenter": 0,
         "verticalCenter": 0,
         "scaleMode": "FILL"
@@ -18,7 +18,7 @@
         "layoutType": "Absolute",
         "name": "sprResourceBar",
         "type": "scale9",
-        "w": 733, "h": 70,
+        "width": 733, "height": 70,
         "horizontalCenter": 0,
         "top": 8,
         "children": [
@@ -32,8 +32,8 @@
             "gap": 5,
             "alignItems": "center",
             "children": [
-              { "type": "sprite", "name": "iconGold", "w": 52, "h": 57 },
-              { "type": "sprite", "name": "sprGoldNum", "w": 191, "h": 32 }
+              { "type": "sprite", "name": "iconGold", "width": 52, "height": 57 },
+              { "type": "sprite", "name": "sprGoldNum", "width": 191, "height": 32 }
             ]
           },
           {
@@ -46,8 +46,8 @@
             "gap": 5,
             "alignItems": "center",
             "children": [
-              { "type": "sprite", "name": "sprDiamondNum", "w": 191, "h": 32 },
-              { "type": "sprite", "name": "iconDiamond", "w": 58, "h": 52 }
+              { "type": "sprite", "name": "sprDiamondNum", "width": 191, "height": 32 },
+              { "type": "sprite", "name": "iconDiamond", "width": 58, "height": 52 }
             ]
           }
         ]
@@ -69,7 +69,7 @@
             "layoutType": "Absolute",
             "name": "sprCard",
             "type": "sprite",
-            "w": 377, "h": 416,
+            "width": 377, "height": 416,
             "children": [
               {
                 "layoutType": "Linear",
@@ -89,7 +89,7 @@
                     "gap": 10,
                     "alignItems": "center",
                     "children": [
-                      { "type": "sprite", "name": "sprAvatar", "w": 158, "h": 172 },
+                      { "type": "sprite", "name": "sprAvatar", "width": 158, "height": 172 },
                       {
                         "layoutType": "Linear",
                         "flexDirection": "column",
@@ -97,8 +97,8 @@
                         "gap": 5,
                         "alignItems": "center",
                         "children": [
-                          { "type": "sprite", "name": "sprName", "w": 126, "h": 35 },
-                          { "type": "sprite", "name": "sprBadge", "w": 127, "h": 117 }
+                          { "type": "sprite", "name": "sprName", "width": 126, "height": 35 },
+                          { "type": "sprite", "name": "sprBadge", "width": 127, "height": 117 }
                         ]
                       }
                     ]
@@ -114,12 +114,12 @@
                         "flexDirection": "row",
                         "name": "rowHP",
                         "gap": 8,
-                        "h": 37,
+                        "height": 37,
                         "alignItems": "center",
                         "children": [
-                          { "type": "sprite", "name": "sprTextHP", "w": 62, "h": 37, "minW": 62 },
-                          { "type": "sprite", "name": "iconRed", "w": 32, "h": 32 },
-                          { "type": "progressBar", "name": "sprBarRed", "w": 150, "h": 20 }
+                          { "type": "sprite", "name": "sprTextHP", "width": 62, "height": 37, "minWidth": 62 },
+                          { "type": "sprite", "name": "iconRed", "width": 32, "height": 32 },
+                          { "type": "progressBar", "name": "sprBarRed", "width": 150, "height": 20 }
                         ]
                       },
                       {
@@ -127,12 +127,12 @@
                         "flexDirection": "row",
                         "name": "rowMP",
                         "gap": 8,
-                        "h": 37,
+                        "height": 37,
                         "alignItems": "center",
                         "children": [
-                          { "type": "sprite", "name": "sprTextMP", "w": 62, "h": 36, "minW": 62 },
-                          { "type": "sprite", "name": "iconYellow", "w": 32, "h": 32 },
-                          { "type": "progressBar", "name": "sprBarYellow", "w": 122, "h": 21 }
+                          { "type": "sprite", "name": "sprTextMP", "width": 62, "height": 36, "minWidth": 62 },
+                          { "type": "sprite", "name": "iconYellow", "width": 32, "height": 32 },
+                          { "type": "progressBar", "name": "sprBarYellow", "width": 122, "height": 21 }
                         ]
                       },
                       {
@@ -140,12 +140,12 @@
                         "flexDirection": "row",
                         "name": "rowSP",
                         "gap": 8,
-                        "h": 37,
+                        "height": 37,
                         "alignItems": "center",
                         "children": [
-                          { "type": "sprite", "name": "sprTextSP", "w": 62, "h": 36, "minW": 62 },
-                          { "type": "sprite", "name": "iconGreen", "w": 32, "h": 32 },
-                          { "type": "progressBar", "name": "sprBarGreen", "w": 173, "h": 21 }
+                          { "type": "sprite", "name": "sprTextSP", "width": 62, "height": 36, "minWidth": 62 },
+                          { "type": "sprite", "name": "iconGreen", "width": 32, "height": 32 },
+                          { "type": "progressBar", "name": "sprBarGreen", "width": 173, "height": 21 }
                         ]
                       }
                     ]
@@ -164,39 +164,24 @@
               {
                 "type": "sprite",
                 "name": "sprDecor",
-                "w": 339, "h": 251,
-                "intro": {
-                  "prop": "scale",
-                  "from": 0,
-                  "to": 1,
-                  "duration": 400,
-                  "easing": "easeOutCubic"
-                }
+                "width": 339, "height": 251
               },
               {
                 "type": "button",
                 "name": "btnHighClass",
                 "title": "High Class",
-                "w": 212, "h": 50
+                "width": 212, "height": 50
               },
               {
                 "type": "sprite",
                 "name": "sprArrowUp",
-                "w": 33, "h": 40,
-                "loop": {
-                  "prop": "y",
-                  "from": 0,
-                  "to": 5,
-                  "duration": 400,
-                  "yoyo": true,
-                  "easing": "easeInOut"
-                }
+                "width": 33, "height": 40
               },
               {
                 "type": "button",
                 "name": "btnUpgrade",
                 "title": "UPGRADE",
-                "w": 212, "h": 50
+                "width": 212, "height": 50
               },
               {
                 "layoutType": "Linear",
@@ -205,11 +190,11 @@
                 "gap": 12,
                 "alignItems": "center",
                 "children": [
-                  { "type": "sprite", "name": "star1", "w": 65, "h": 63 },
-                  { "type": "sprite", "name": "star2", "w": 65, "h": 63 },
-                  { "type": "sprite", "name": "star3", "w": 65, "h": 63 },
-                  { "type": "sprite", "name": "star4", "w": 65, "h": 63 },
-                  { "type": "sprite", "name": "star5", "w": 65, "h": 63 }
+                  { "type": "sprite", "name": "star1", "width": 65, "height": 63 },
+                  { "type": "sprite", "name": "star2", "width": 65, "height": 63 },
+                  { "type": "sprite", "name": "star3", "width": 65, "height": 63 },
+                  { "type": "sprite", "name": "star4", "width": 65, "height": 63 },
+                  { "type": "sprite", "name": "star5", "width": 65, "height": 63 }
                 ]
               }
             ]
@@ -220,7 +205,7 @@
       {
         "type": "button",
         "name": "btnReplay",
-        "w": 89, "h": 85,
+        "width": 89, "height": 85,
         "left": 10,
         "bottom": 10
       }

@@ -22,12 +22,7 @@
         return label;
     };
 
-    /**
-     * Create a cc.LabelTTF at percentage-based position.
-     */
-    B.createLabelPercent = function (parent, text, fontSize, pX, pY, opts) {
-        return B.createLabel(parent, text, fontSize, B.pX(pX), B.pY(pY), opts);
-    };
+
 
     /**
      * Create a cc.LabelBMFont (bitmap font label).
@@ -72,12 +67,7 @@
         return t;
     };
 
-    /**
-     * Create a ccui.Text at percentage-based position.
-     */
-    B.createTextPercent = function (parent, text, fontName, fontSize, pX, pY, opts) {
-        return B.createText(parent, text, fontName, fontSize, B.pX(pX), B.pY(pY), opts);
-    };
+
 
     /**
      * Create a ccui.RichText container.

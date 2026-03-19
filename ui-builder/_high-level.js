@@ -45,170 +45,8 @@
         return cn;
     };
 
-    // ───────────────────────────────────────────────────────────────
-    //  CSS-LIKE LAYOUT HELPERS
-    // ───────────────────────────────────────────────────────────────
-
-    /**
-     * Create a horizontal row of children with automatic spacing.
-     * Like CSS flexbox row.
-     *
-     * @param {cc.Node}  parent
-     * @param {Array}    children   Array of cc.Node (already created but NOT added to parent)
-     * @param {number}   x          Row center X
-     * @param {number}   y          Row center Y
-     * @param {Object}   [opts]     Extra: gap (px between items, default 10),
-     *                              align ("top"|"center"|"bottom", default "center")
-     * @returns {cc.Node} The row container node
-     */
-    B.createRow = function (parent, children, x, y, opts) {
-        opts = opts || {};
-        var gap = (opts.gap !== undefined) ? opts.gap : 10;
-        var align = opts.align || "center";
-        var container = new cc.Node();
-        container.setPosition(x, y);
-
-        // Measure total width
-        var totalW = 0;
-        var maxH = 0;
-        for (var i = 0; i < children.length; i++) {
-            var cs = children[i].getContentSize();
-            var sx = children[i].getScaleX ? children[i].getScaleX() : 1;
-            var sy = children[i].getScaleY ? children[i].getScaleY() : 1;
-            totalW += cs.width * sx;
-            maxH = Math.max(maxH, cs.height * sy);
-            if (i > 0) totalW += gap;
-        }
-
-        // Position children
-        var curX = -totalW / 2;
-        for (var j = 0; j < children.length; j++) {
-            var child = children[j];
-            var csize = child.getContentSize();
-            var csx = child.getScaleX ? child.getScaleX() : 1;
-            var csy = child.getScaleY ? child.getScaleY() : 1;
-            var cw = csize.width * csx;
-            var ch = csize.height * csy;
-            var anchor = child.getAnchorPoint();
-
-            var cy = 0;
-            if (align === "top") cy = (maxH - ch) / 2;
-            else if (align === "bottom") cy = -(maxH - ch) / 2;
-
-            child.setPosition(curX + cw * anchor.x, cy);
-            container.addChild(child);
-            curX += cw + gap;
-        }
-
-        container.setContentSize(totalW, maxH);
-        B._applyOpts(container, opts);
-        if (parent) parent.addChild(container, (opts && opts.zOrder) || 0);
-        return container;
-    };
-
-    /**
-     * Create a vertical column of children with automatic spacing.
-     * Like CSS flexbox column. Children are laid out top-to-bottom.
-     *
-     * @param {cc.Node}  parent
-     * @param {Array}    children
-     * @param {number}   x
-     * @param {number}   y
-     * @param {Object}   [opts]     Extra: gap, align ("left"|"center"|"right")
-     * @returns {cc.Node}
-     */
-    B.createColumn = function (parent, children, x, y, opts) {
-        opts = opts || {};
-        var gap = (opts.gap !== undefined) ? opts.gap : 10;
-        var align = opts.align || "center";
-        var container = new cc.Node();
-        container.setPosition(x, y);
-
-        // Measure total height
-        var totalH = 0;
-        var maxW = 0;
-        for (var i = 0; i < children.length; i++) {
-            var cs = children[i].getContentSize();
-            var sx = children[i].getScaleX ? children[i].getScaleX() : 1;
-            var sy = children[i].getScaleY ? children[i].getScaleY() : 1;
-            totalH += cs.height * sy;
-            maxW = Math.max(maxW, cs.width * sx);
-            if (i > 0) totalH += gap;
-        }
-
-        // Position children top-to-bottom
-        var curY = totalH / 2;
-        for (var j = 0; j < children.length; j++) {
-            var child = children[j];
-            var csize = child.getContentSize();
-            var csx = child.getScaleX ? child.getScaleX() : 1;
-            var csy = child.getScaleY ? child.getScaleY() : 1;
-            var cw = csize.width * csx;
-            var ch = csize.height * csy;
-            var anchor = child.getAnchorPoint();
-
-            var cx = 0;
-            if (align === "left") cx = -(maxW - cw) / 2;
-            else if (align === "right") cx = (maxW - cw) / 2;
-
-            child.setPosition(cx, curY - ch * (1 - anchor.y));
-            container.addChild(child);
-            curY -= ch + gap;
-        }
-
-        container.setContentSize(maxW, totalH);
-        B._applyOpts(container, opts);
-        if (parent) parent.addChild(container, (opts && opts.zOrder) || 0);
-        return container;
-    };
-
-    /**
-     * Create a grid layout of children.
-     * @param {cc.Node}  parent
-     * @param {number}   cols       Number of columns
-     * @param {Array}    children
-     * @param {number}   x
-     * @param {number}   y
-     * @param {Object}   [opts]     Extra: gapX, gapY, cellWidth, cellHeight
-     * @returns {cc.Node}
-     */
-    B.createGrid = function (parent, cols, children, x, y, opts) {
-        opts = opts || {};
-        var gapX = (opts.gapX !== undefined) ? opts.gapX : 10;
-        var gapY = (opts.gapY !== undefined) ? opts.gapY : 10;
-        var container = new cc.Node();
-        container.setPosition(x, y);
-
-        // Determine cell size
-        var cellW = opts.cellWidth || 0;
-        var cellH = opts.cellHeight || 0;
-        if (!cellW || !cellH) {
-            for (var m = 0; m < children.length; m++) {
-                var ms = children[m].getContentSize();
-                var msc = children[m].getScale ? children[m].getScale() : 1;
-                cellW = Math.max(cellW, ms.width * msc);
-                cellH = Math.max(cellH, ms.height * msc);
-            }
-        }
-
-        var rows = Math.ceil(children.length / cols);
-        var totalW = cols * cellW + (cols - 1) * gapX;
-        var totalH = rows * cellH + (rows - 1) * gapY;
-
-        for (var i = 0; i < children.length; i++) {
-            var col = i % cols;
-            var row = Math.floor(i / cols);
-            var px = -totalW / 2 + col * (cellW + gapX) + cellW / 2;
-            var py = totalH / 2 - row * (cellH + gapY) - cellH / 2;
-            children[i].setPosition(px, py);
-            container.addChild(children[i]);
-        }
-
-        container.setContentSize(totalW, totalH);
-        B._applyOpts(container, opts);
-        parent.addChild(container, (opts && opts.zOrder) || 0);
-        return container;
-    };
+    // NOTE: createRow, createColumn, createGrid have been removed.
+    //       Use UIBuilder.arrangeAsRow/Column/Grid from _layout.js instead.
 
     /**
      * Evenly distribute existing children within a range.
@@ -1061,33 +899,26 @@
                 case "row":
                 case "column":
                 case "grid":
-                    // For layout types, build children first without adding to parent
-                    var layoutChildren = [];
+                    // Container node + arrange children using layout helpers
+                    node = B.createNode(parentNode, x, y, opts);
                     if (desc.children) {
                         for (var lc = 0; lc < desc.children.length; lc++) {
-                            // Create a temporary parent to extract the node
-                            var tempParent = new cc.Node();
-                            var childNode = buildOne(tempParent, desc.children[lc]);
-                            if (childNode) {
-                                childNode.removeFromParent(false);
-                                layoutChildren.push(childNode);
-                            }
+                            buildOne(node, desc.children[lc]);
                         }
                     }
-                    var layoutOpts = opts;
+                    var layoutOpts = {};
                     if (desc.gap !== undefined) layoutOpts.gap = desc.gap;
-                    if (desc.gapX !== undefined) layoutOpts.gapX = desc.gapX;
-                    if (desc.gapY !== undefined) layoutOpts.gapY = desc.gapY;
-                    if (desc.align) layoutOpts.align = desc.align;
-
+                    if (desc.align) layoutOpts.alignItems = desc.align;
                     if (type === "row") {
-                        node = B.createRow(parentNode, layoutChildren, x, y, layoutOpts);
+                        B.arrangeAsRow(node, layoutOpts);
                     } else if (type === "column") {
-                        node = B.createColumn(parentNode, layoutChildren, x, y, layoutOpts);
+                        B.arrangeAsColumn(node, layoutOpts);
                     } else {
-                        node = B.createGrid(parentNode, desc.cols || 3, layoutChildren, x, y, layoutOpts);
+                        layoutOpts.columns = desc.cols || 3;
+                        if (desc.gapX !== undefined) layoutOpts.spacingX = desc.gapX;
+                        if (desc.gapY !== undefined) layoutOpts.spacingY = desc.gapY;
+                        B.arrangeAsGrid(node, layoutOpts);
                     }
-                    // Children already added by layout functions, skip normal children processing
                     desc.children = null;
                     break;
 

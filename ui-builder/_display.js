@@ -50,12 +50,7 @@
         return sp;
     };
 
-    /**
-     * Create a cc.Sprite at percentage-based position.
-     */
-    B.createSpritePercent = function (parent, file, pX, pY, opts) {
-        return B.createSprite(parent, file, B.pX(pX), B.pY(pY), opts);
-    };
+
 
     /**
      * Create a 9-slice (scale9) sprite.
@@ -96,12 +91,7 @@
         return iv;
     };
 
-    /**
-     * Create a ccui.ImageView at percentage-based position.
-     */
-    B.createImageViewPercent = function (parent, file, pX, pY, opts) {
-        return B.createImageView(parent, file, B.pX(pX), B.pY(pY), opts);
-    };
+
 
     /**
      * Set any node's position using percent values (0-100).

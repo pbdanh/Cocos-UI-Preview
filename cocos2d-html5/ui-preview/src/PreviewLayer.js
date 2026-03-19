@@ -150,6 +150,12 @@ var PreviewLayer = cc.Layer.extend({
         sprTextHP.setContentSize(62, 37);
         sprTextHP.setName("sprTextHP");
         rowHP.addChild(sprTextHP);
+        (function() {
+            var _cs = sprTextHP.getContentSize();
+            var _w = _cs.width, _h = _cs.height;
+            _w = Math.max(_w, 62);
+            sprTextHP.setContentSize(_w, _h);
+        })();
 
         // ── iconRed ──
         var iconRed = UIBuilder.sprite(res_preview.iconRed);
@@ -180,6 +186,12 @@ var PreviewLayer = cc.Layer.extend({
         sprTextMP.setContentSize(62, 36);
         sprTextMP.setName("sprTextMP");
         rowMP.addChild(sprTextMP);
+        (function() {
+            var _cs = sprTextMP.getContentSize();
+            var _w = _cs.width, _h = _cs.height;
+            _w = Math.max(_w, 62);
+            sprTextMP.setContentSize(_w, _h);
+        })();
 
         // ── iconYellow ──
         var iconYellow = UIBuilder.sprite(res_preview.iconYellow);
@@ -210,6 +222,12 @@ var PreviewLayer = cc.Layer.extend({
         sprTextSP.setContentSize(62, 36);
         sprTextSP.setName("sprTextSP");
         rowSP.addChild(sprTextSP);
+        (function() {
+            var _cs = sprTextSP.getContentSize();
+            var _w = _cs.width, _h = _cs.height;
+            _w = Math.max(_w, 62);
+            sprTextSP.setContentSize(_w, _h);
+        })();
 
         // ── iconGreen ──
         var iconGreen = UIBuilder.sprite(res_preview.iconGreen);
@@ -245,12 +263,6 @@ var PreviewLayer = cc.Layer.extend({
         sprDecor.setName("sprDecor");
         colRightPanel.addChild(sprDecor);
 
-        // Animations for sprDecor
-        sprDecor.setScale(0);
-        var sprDecor_anim0 = cc.scaleTo(0.40, 1);
-        sprDecor_anim0 = sprDecor_anim0.easing(cc.easeOut(3));
-        sprDecor.runAction(sprDecor_anim0);
-
         // ── btnHighClass ──
         var btnHighClass = UIBuilder.button(res_preview.btnHighClass);
         btnHighClass.setPressedActionEnabled(true);
@@ -264,15 +276,6 @@ var PreviewLayer = cc.Layer.extend({
         sprArrowUp.setContentSize(33, 40);
         sprArrowUp.setName("sprArrowUp");
         colRightPanel.addChild(sprArrowUp);
-
-        // Animations for sprArrowUp
-        var sprArrowUp_anim0 = cc.moveTo(0.40, sprArrowUp.getPositionX(), 5);
-        sprArrowUp_anim0 = sprArrowUp_anim0.easing(cc.easeInOut(2));
-        var sprArrowUp_anim0_rev = cc.moveTo(0.40, sprArrowUp.getPositionX(), 0);
-        sprArrowUp_anim0_rev = sprArrowUp_anim0_rev.easing(cc.easeInOut(2));
-        sprArrowUp_anim0 = cc.sequence(sprArrowUp_anim0, sprArrowUp_anim0_rev);
-        sprArrowUp_anim0 = cc.repeatForever(sprArrowUp_anim0);
-        sprArrowUp.runAction(sprArrowUp_anim0);
 
         // ── btnUpgrade ──
         var btnUpgrade = UIBuilder.button(res_preview.btnUpgrade);
