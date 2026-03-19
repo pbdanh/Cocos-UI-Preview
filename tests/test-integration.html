@@ -147,6 +147,8 @@ function runRuntime(layout, parentW, parentH) {
         if (c.margin !== undefined) child._margin = c.margin;
         if (c.flex !== undefined) child._flex = c.flex;
         if (c.alignSelf !== undefined) child._alignSelf = c.alignSelf;
+        if (c.percentWidth !== undefined) child._percentWidth = c.percentWidth;
+        if (c.percentHeight !== undefined) child._percentHeight = c.percentHeight;
         container.addChild(child);
     }
 
@@ -904,6 +906,88 @@ addCategory('🖼️ Sprite ScaleMode (Engine-only)');
         sprFit2: { x: 150, y: 200, w: 400, h: 200, sx: 0.75, sy: 0.75 }
     };
     compareScaleMode('scaleMode=FIT — landscape 400x200 in portrait 300x400', ep, expected, ['sprFit2']);
+})();
+
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CATEGORY 9: PERCENT WIDTH / HEIGHT                         ║
+// ╚══════════════════════════════════════════════════════════════╝
+addCategory('📐 Percent Width / Height');
+
+// T38: Row — percentWidth=0.5 on first child
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 10, alignItems: 'start',
+        children: [
+            { type: 'sprite', name: 'a', width: 0, height: 40, percentWidth: 0.5 },
+            { type: 'sprite', name: 'b', width: 60, height: 40 }
+        ]
+    };
+    var PW = 400, PH = 60;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — percentWidth=0.5 (50% of 400 = 200)', ep, rp, ['a','b']);
+})();
+
+// T39: Column — percentHeight=0.3 on first child
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column', gap: 10, alignItems: 'start',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 0, percentHeight: 0.3 },
+            { type: 'sprite', name: 'b', width: 60, height: 40 }
+        ]
+    };
+    var PW = 200, PH = 300;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Column — percentHeight=0.3 (30% of 300 = 90)', ep, rp, ['a','b']);
+})();
+
+// T40: Row — both percentWidth and percentHeight
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 0, alignItems: 'start',
+        children: [
+            { type: 'sprite', name: 'a', width: 0, height: 0, percentWidth: 0.4, percentHeight: 0.5 },
+            { type: 'sprite', name: 'b', width: 80, height: 30 }
+        ]
+    };
+    var PW = 500, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — percentWidth=0.4, percentHeight=0.5', ep, rp, ['a','b']);
+})();
+
+// T41: Column — percentWidth=0.8 (cross-axis sizing)
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column', gap: 5, alignItems: 'center',
+        children: [
+            { type: 'sprite', name: 'a', width: 0, height: 40, percentWidth: 0.8 },
+            { type: 'sprite', name: 'b', width: 60, height: 30 }
+        ]
+    };
+    var PW = 200, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Column — percentWidth=0.8 (cross-axis 80%)', ep, rp, ['a','b']);
+})();
+
+// T42: Row — multiple children with different percents
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 10, alignItems: 'center',
+        children: [
+            { type: 'sprite', name: 'a', width: 0, height: 40, percentWidth: 0.3 },
+            { type: 'sprite', name: 'b', width: 0, height: 40, percentWidth: 0.2 },
+            { type: 'sprite', name: 'c', width: 50, height: 40 }
+        ]
+    };
+    var PW = 400, PH = 60;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('Row — multiple percentWidth (0.3 + 0.2 + fixed)', ep, rp, ['a','b','c']);
 })();
 
 

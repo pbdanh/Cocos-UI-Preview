@@ -236,10 +236,10 @@
         var w = node.width;
         var h = node.height;
 
-        if (w === undefined && node.percentWidth !== undefined && parentW !== undefined) {
+        if (!w && node.percentWidth !== undefined && parentW !== undefined) {
             w = parentW * node.percentWidth;
         }
-        if (h === undefined && node.percentHeight !== undefined && parentH !== undefined) {
+        if (!h && node.percentHeight !== undefined && parentH !== undefined) {
             h = parentH * node.percentHeight;
         }
 

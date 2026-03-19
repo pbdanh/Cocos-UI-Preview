@@ -412,6 +412,31 @@
     }
 
     /**
+     * Resolve percentWidth/percentHeight on children.
+     * Must be called BEFORE flex distribution and positioning.
+     * @param {Array} children  Array of child nodes
+     * @param {number} parentW  Available parent width (after padding)
+     * @param {number} parentH  Available parent height (after padding)
+     */
+    function _resolvePercentSizes(children, parentW, parentH) {
+        for (var i = 0; i < children.length; i++) {
+            var child = children[i];
+            var cs = child.getContentSize();
+            var w = cs.width, h = cs.height;
+            var changed = false;
+            if (child._percentWidth !== undefined && child._percentWidth > 0) {
+                w = parentW * child._percentWidth;
+                changed = true;
+            }
+            if (child._percentHeight !== undefined && child._percentHeight > 0) {
+                h = parentH * child._percentHeight;
+                changed = true;
+            }
+            if (changed) child.setContentSize(w, h);
+        }
+    }
+
+    /**
      * Arrange children of a container as a horizontal row (left-to-right).
      * Uses ABSOLUTE positioning — works with any cc.Node, not just ccui.Widget.
      *
@@ -454,6 +479,9 @@
         var ordered = [];
         for (var k = 0; k < children.length; k++) ordered.push(children[k]);
         if (opts.reverse) ordered.reverse();
+
+        // Resolve percentWidth/percentHeight before layout
+        _resolvePercentSizes(ordered, parentW, parentH);
 
         var i, child, cs, margin;
 
@@ -600,6 +628,9 @@
         for (var k = 0; k < children.length; k++) ordered.push(children[k]);
         if (opts.reverse) ordered.reverse();
 
+        // Resolve percentWidth/percentHeight before layout
+        _resolvePercentSizes(ordered, parentW, parentH);
+
         var i, child, cs, margin;
 
         // ── Flex: distribute remaining space ──
@@ -722,7 +753,11 @@
         var spX = opts.spacingX || 0;
         var spY = opts.spacingY || 0;
         var pad = _parsePadding(opts.padding);
+        var parentW = container.getContentSize().width - pad.left - pad.right;
         var parentH = container.getContentSize().height;
+
+        // Resolve percentWidth/percentHeight before layout
+        _resolvePercentSizes(children, parentW, parentH - pad.top - pad.bottom);
 
         // Cell size — auto from first child if not specified
         var firstCS = children[0].getContentSize();
@@ -759,6 +794,9 @@
         var pad = _parsePadding(opts.padding);
         var parentW = container.getContentSize().width - pad.left - pad.right;
         var parentH = container.getContentSize().height;
+
+        // Resolve percentWidth/percentHeight before layout
+        _resolvePercentSizes(children, parentW, parentH - pad.top - pad.bottom);
 
         var x = pad.left;
         var lineH = 0;
