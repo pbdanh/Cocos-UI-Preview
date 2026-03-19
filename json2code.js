@@ -1,27 +1,22 @@
 #!/usr/bin/env node
 /**
- * json2code.js — Convert layout JSON to UIBuilder code
+ * json2code.js — Convert layout JSON to UIBuilder adaptive code
  *
  * Usage:
- *   node json2code.js --input endgame-preview.json
- *   node json2code.js --input endgame-preview.json --output EndGameLayer.js --resources res_endgame --layer EndGameLayer
- *   node json2code.js --input endgame-preview.json --width 873 --height 643 --no-wrap
- *   node json2code.js --input endgame-preview.json --responsive --layer PreviewLayer
- *   node json2code.js --input endgame-preview.json --adaptive --layer PreviewLayer
+ *   node json2code.js --input preview.json
+ *   node json2code.js --input preview.json --output PreviewLayer.js --resources res_preview --layer PreviewLayer
+ *   node json2code.js --input preview.json --width 873 --height 643 --no-wrap
  *
  * Options:
  *   --input, -i      Input JSON file path (required)
  *   --output, -o     Output JS file path (default: stdout)
- *   --resources, -r  Resource map variable name (e.g., "res_endgame")
+ *   --resources, -r  Resource map variable name (e.g., "res_preview")
  *   --layer, -l      Layer class name (default: "GeneratedLayer")
  *   --width, -w      Design width (default: 873)
  *   --height, -h     Design height (default: 643)
  *   --no-wrap        Don't wrap in Layer.extend
  *   --no-anims       Skip animations
  *   --no-comments    Skip comments
- *   --raw            Use raw cc.* export instead of UIBuilder
- *   --responsive     Generate responsive code (uses LayoutEngine at runtime)
- *   --adaptive       Generate adaptive code (uses ccui.Layout + pinEdges, no runtime engine)
  */
 
 var fs = require('fs');
@@ -42,10 +37,7 @@ var opts = {
     height: 643,
     wrap: true,
     anims: true,
-    comments: true,
-    raw: false,
-    responsive: false,
-    adaptive: false
+    comments: true
 };
 
 for (var i = 0; i < args.length; i++) {
@@ -60,25 +52,20 @@ for (var i = 0; i < args.length; i++) {
         case '--no-wrap': opts.wrap = false; break;
         case '--no-anims': opts.anims = false; break;
         case '--no-comments': opts.comments = false; break;
-        case '--responsive': opts.responsive = true; break;
-        case '--adaptive': opts.adaptive = true; break;
-        case '--raw': opts.raw = true; break;
+        case '--adaptive': break; // accepted for backward compat, always adaptive
         case '--help':
             console.log('Usage: node json2code.js --input <file.json> [options]');
             console.log('');
             console.log('Options:');
             console.log('  --input, -i      Input JSON file (required)');
             console.log('  --output, -o     Output JS file (default: stdout)');
-            console.log('  --resources, -r  Resource map variable (e.g., "res_endgame")');
+            console.log('  --resources, -r  Resource map variable (e.g., "res_preview")');
             console.log('  --layer, -l      Layer class name (default: "GeneratedLayer")');
             console.log('  --width, -w      Design width (default: 873)');
             console.log('  --height, -h     Design height (default: 643)');
             console.log('  --no-wrap        Don\'t wrap in Layer.extend');
             console.log('  --no-anims       Skip animations');
             console.log('  --no-comments    Skip comments');
-            console.log('  --raw            Use raw cc.* export');
-            console.log('  --responsive     Generate responsive layout code');
-            console.log('  --adaptive       Generate adaptive layout (ccui.Layout + pinEdges)');
             process.exit(0);
             break;
         default:
@@ -116,36 +103,14 @@ var engine = new LayoutEngine();
 engine.buildTree(jsonData);
 engine.computeLayout(opts.width, opts.height);
 
-// Export code
-var code;
-if (opts.adaptive) {
-    code = engine.exportAdaptiveCode({
-        resourceMapVar: opts.resources,
-        layerName: opts.layer,
-        wrapInLayer: opts.wrap,
-        includeAnimations: opts.anims,
-        includeComments: opts.comments
-    });
-} else if (opts.responsive) {
-    code = engine.exportResponsiveCode({
-        resourceMapVar: opts.resources,
-        layerName: opts.layer,
-        includeAnimations: opts.anims,
-        includeComments: opts.comments
-    });
-} else if (opts.raw) {
-    code = engine.exportCocosCode({
-        includeAnimations: opts.anims
-    });
-} else {
-    code = engine.exportUIBuilderCode({
-        resourceMapVar: opts.resources,
-        layerName: opts.layer,
-        wrapInLayer: opts.wrap,
-        includeAnimations: opts.anims,
-        includeComments: opts.comments
-    });
-}
+// Export adaptive code
+var code = engine.exportAdaptiveCode({
+    resourceMapVar: opts.resources,
+    layerName: opts.layer,
+    wrapInLayer: opts.wrap,
+    includeAnimations: opts.anims,
+    includeComments: opts.comments
+});
 
 // Output
 if (opts.output) {

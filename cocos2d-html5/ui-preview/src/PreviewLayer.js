@@ -158,7 +158,11 @@ var PreviewLayer = cc.Layer.extend({
         rowHP.addChild(iconRed);
 
         // ── sprBarRed ──
-        var sprBarRed = UIBuilder.sprite(res_preview.sprBarRed);
+        var sprBarRed = new cc.ProgressTimer(new cc.Sprite(res_preview.sprBarRed));
+        sprBarRed.setType(cc.ProgressTimer.TYPE_BAR);
+        sprBarRed.setMidpoint(cc.p(0, 0.5));
+        sprBarRed.setBarChangeRate(cc.p(1, 0));
+        sprBarRed.setPercentage(100);
         sprBarRed.setContentSize(150, 20);
         sprBarRed.setName("sprBarRed");
         rowHP.addChild(sprBarRed);
@@ -184,7 +188,11 @@ var PreviewLayer = cc.Layer.extend({
         rowMP.addChild(iconYellow);
 
         // ── sprBarYellow ──
-        var sprBarYellow = UIBuilder.sprite(res_preview.sprBarYellow);
+        var sprBarYellow = new cc.ProgressTimer(new cc.Sprite(res_preview.sprBarYellow));
+        sprBarYellow.setType(cc.ProgressTimer.TYPE_BAR);
+        sprBarYellow.setMidpoint(cc.p(0, 0.5));
+        sprBarYellow.setBarChangeRate(cc.p(1, 0));
+        sprBarYellow.setPercentage(100);
         sprBarYellow.setContentSize(122, 21);
         sprBarYellow.setName("sprBarYellow");
         rowMP.addChild(sprBarYellow);
@@ -210,7 +218,11 @@ var PreviewLayer = cc.Layer.extend({
         rowSP.addChild(iconGreen);
 
         // ── sprBarGreen ──
-        var sprBarGreen = UIBuilder.sprite(res_preview.sprBarGreen);
+        var sprBarGreen = new cc.ProgressTimer(new cc.Sprite(res_preview.sprBarGreen));
+        sprBarGreen.setType(cc.ProgressTimer.TYPE_BAR);
+        sprBarGreen.setMidpoint(cc.p(0, 0.5));
+        sprBarGreen.setBarChangeRate(cc.p(1, 0));
+        sprBarGreen.setPercentage(100);
         sprBarGreen.setContentSize(173, 21);
         sprBarGreen.setName("sprBarGreen");
         rowSP.addChild(sprBarGreen);
@@ -254,6 +266,13 @@ var PreviewLayer = cc.Layer.extend({
         colRightPanel.addChild(sprArrowUp);
 
         // Animations for sprArrowUp
+        var sprArrowUp_anim0 = cc.moveTo(0.40, sprArrowUp.getPositionX(), 5);
+        sprArrowUp_anim0 = sprArrowUp_anim0.easing(cc.easeInOut(2));
+        var sprArrowUp_anim0_rev = cc.moveTo(0.40, sprArrowUp.getPositionX(), 0);
+        sprArrowUp_anim0_rev = sprArrowUp_anim0_rev.easing(cc.easeInOut(2));
+        sprArrowUp_anim0 = cc.sequence(sprArrowUp_anim0, sprArrowUp_anim0_rev);
+        sprArrowUp_anim0 = cc.repeatForever(sprArrowUp_anim0);
+        sprArrowUp.runAction(sprArrowUp_anim0);
 
         // ── btnUpgrade ──
         var btnUpgrade = UIBuilder.button(res_preview.btnUpgrade);
