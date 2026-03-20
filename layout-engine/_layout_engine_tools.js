@@ -31,10 +31,12 @@
                 issues.push({ level: 'warning', nodeId: id, message: 'Node has zero size (0×0).' });
             }
 
-            // 2. Out of screen bounds
+            // 2. Out of screen bounds (account for scale)
             if (node._absX !== undefined && node._absY !== undefined) {
-                var right = node._absX + (node._width || 0);
-                var top = node._absY + (node._height || 0);
+                var scX = node._scaleX !== undefined ? node._scaleX : 1;
+                var scY = node._scaleY !== undefined ? node._scaleY : 1;
+                var right = node._absX + (node._width || 0) * scX;
+                var top = node._absY + (node._height || 0) * scY;
                 if (node._absX < 0 || node._absY < 0 || right > screenW || top > screenH) {
                     if (node !== self._root) {
                         issues.push({ level: 'info', nodeId: id,

@@ -127,11 +127,10 @@
      * Unlike alignTop (screen-relative), this works within any container.
      *
      * @param {cc.Node} node
-     * @param {cc.Node} parent   The parent node (must be node's actual parent)
      * @param {number}  [margin] Pixels from the top edge (default 0)
      * @returns {ccui.LayoutComponent}
      */
-    B.pinToTop = function (node, parent, margin) {
+    B.pinToTop = function (node, margin) {
         var lc = ccui.LayoutComponent.bindLayoutComponent(node);
         lc.setVerticalEdge(ccui.LayoutComponent.verticalEdge.TOP);
         lc.setTopMargin(margin || 0);
@@ -147,11 +146,10 @@
      * Unlike alignBottom (screen-relative), this works within any container.
      *
      * @param {cc.Node} node
-     * @param {cc.Node} parent   The parent node (must be node's actual parent)
      * @param {number}  [margin] Pixels from the bottom edge (default 0)
      * @returns {ccui.LayoutComponent}
      */
-    B.pinToBottom = function (node, parent, margin) {
+    B.pinToBottom = function (node, margin) {
         var lc = ccui.LayoutComponent.bindLayoutComponent(node);
         lc.setVerticalEdge(ccui.LayoutComponent.verticalEdge.BOTTOM);
         lc.setBottomMargin(margin || 0);
@@ -167,11 +165,10 @@
      * Unlike alignLeft (screen-relative), this works within any container.
      *
      * @param {cc.Node} node
-     * @param {cc.Node} parent   The parent node (must be node's actual parent)
      * @param {number}  [margin] Pixels from the left edge (default 0)
      * @returns {ccui.LayoutComponent}
      */
-    B.pinToLeft = function (node, parent, margin) {
+    B.pinToLeft = function (node, margin) {
         var lc = ccui.LayoutComponent.bindLayoutComponent(node);
         lc.setHorizontalEdge(ccui.LayoutComponent.horizontalEdge.LEFT);
         lc.setLeftMargin(margin || 0);
@@ -187,11 +184,10 @@
      * Unlike alignRight (screen-relative), this works within any container.
      *
      * @param {cc.Node} node
-     * @param {cc.Node} parent   The parent node (must be node's actual parent)
      * @param {number}  [margin] Pixels from the right edge (default 0)
      * @returns {ccui.LayoutComponent}
      */
-    B.pinToRight = function (node, parent, margin) {
+    B.pinToRight = function (node, margin) {
         var lc = ccui.LayoutComponent.bindLayoutComponent(node);
         lc.setHorizontalEdge(ccui.LayoutComponent.horizontalEdge.RIGHT);
         lc.setRightMargin(margin || 0);

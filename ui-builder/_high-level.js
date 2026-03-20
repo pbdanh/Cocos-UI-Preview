@@ -181,7 +181,7 @@
      * Multi-child alignment utility.
      * @param {Array}   nodes
      * @param {string}  type   "left"|"right"|"top"|"bottom"|"centerX"|"centerY"
-     * @param {number}  [value]  Target position (defaults to average)
+     * @param {number}  [value]  Target position (defaults: left/bottom=min, right/top=max, center=average)
      */
     B.align = function (nodes, type, value) {
         if (nodes.length === 0) return;
@@ -189,13 +189,23 @@
 
         // Calculate default value if not provided
         if (val === undefined) {
-            var sum = 0;
+            var positions = [];
             for (var i = 0; i < nodes.length; i++) {
                 var p = nodes[i].getPosition();
-                if (type === "left" || type === "right" || type === "centerX") sum += p.x;
-                else sum += p.y;
+                if (type === "left" || type === "right" || type === "centerX") positions.push(p.x);
+                else positions.push(p.y);
             }
-            val = sum / nodes.length;
+            // Use semantically correct default: left/bottom=min, right/top=max, center=average
+            if (type === "left" || type === "bottom") {
+                val = Math.min.apply(null, positions);
+            } else if (type === "right" || type === "top") {
+                val = Math.max.apply(null, positions);
+            } else {
+                // centerX, centerY — average
+                var sum = 0;
+                for (var s = 0; s < positions.length; s++) sum += positions[s];
+                val = sum / positions.length;
+            }
         }
 
         for (var j = 0; j < nodes.length; j++) {

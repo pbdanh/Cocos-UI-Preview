@@ -30,7 +30,10 @@
         this._nodeMap = {};
         this._nextId = 1;
 
-        // Deep clone to prevent mutating original data
+        // Deep clone to prevent mutating original data.
+        // LIMITATION: JSON.parse(JSON.stringify()) drops functions, undefined values,
+        // and throws on circular references. This is acceptable because layout JSON
+        // data should only contain plain data (no functions or circular refs).
         this._root = JSON.parse(JSON.stringify(uiJsonData));
         if (Array.isArray(this._root)) {
             this._root = this._root[0];
@@ -74,12 +77,11 @@
      * computeLayout(screenWidth, screenHeight, safeAreaInsets)
      * safeAreaInsets: {top, bottom, left, right} (Optional)
      */
-    LayoutEngine.prototype.computeLayout = function(screenWidth, screenHeight, safeAreaInsets) {
+    LayoutEngine.prototype.computeLayout = function(screenWidth, screenHeight) {
         if (!this._root) return;
 
         this._screenWidth = screenWidth || 0;
         this._screenHeight = screenHeight || 0;
-        this._safeAreaInsets = safeAreaInsets || { top: 0, bottom: 0, left: 0, right: 0 };
 
         // 1. Setup root bounds
         this._root.width = this._screenWidth;
@@ -173,38 +175,6 @@
              padRight = node.paddingRight || 0;
         }
 
-        // Apply Safe Area Insets if requested by the node
-        if (node.useSafeArea && this._safeAreaInsets) {
-            padTop += this._safeAreaInsets.top || 0;
-            padBottom += this._safeAreaInsets.bottom || 0;
-            padLeft += this._safeAreaInsets.left || 0;
-            padRight += this._safeAreaInsets.right || 0;
-        }
-
-        return { top: padTop, bottom: padBottom, left: padLeft, right: padRight };
-    };
-
-    /**
-     * Returns padding WITHOUT safe area insets applied.
-     * Used when a child has ignoreSafeArea=true to bypass parent's safe area.
-     */
-    LayoutEngine.prototype._getPaddingWithoutSafeArea = function(node) {
-        var p = node.padding;
-        var padTop = 0, padBottom = 0, padLeft = 0, padRight = 0;
-        if (p !== undefined) {
-             if (typeof p === 'number') {
-                 padTop = padBottom = padLeft = padRight = p;
-             } else if (Array.isArray(p)) {
-                 if (p.length === 1) padTop = padBottom = padLeft = padRight = p[0];
-                 else if (p.length === 2) { padTop = padBottom = p[0]; padLeft = padRight = p[1]; }
-                 else if (p.length === 4) { padTop = p[0]; padRight = p[1]; padBottom = p[2]; padLeft = p[3]; }
-             }
-        } else {
-             padTop = node.paddingTop || 0;
-             padBottom = node.paddingBottom || 0;
-             padLeft = node.paddingLeft || 0;
-             padRight = node.paddingRight || 0;
-        }
         return { top: padTop, bottom: padBottom, left: padLeft, right: padRight };
     };
 
@@ -479,12 +449,7 @@
             for (var i = 0; i < visCount; i++) {
                 var c = visChildren[i];
                 var cLeft = undefined, cBottom = undefined;
-
-                // Determine effective padding for this child
                 var cPad = pad;
-                if (c.ignoreSafeArea && node.useSafeArea && this._safeAreaInsets) {
-                    cPad = this._getPaddingWithoutSafeArea(node);
-                }
 
                 // percentPosition support
                 var cAnchor = c.anchor || [0.5, 0.5];

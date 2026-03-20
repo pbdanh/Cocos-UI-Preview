@@ -1,26 +1,39 @@
 # Layout Engine — Design Analysis
 
 > Phân tích so sánh với CSS layout model. Scope: **static layout** cho game Cocos2d-JS.
+> Updated: 2026-03-20
 
 ---
 
-## ✅ Đã Fix (từ các iteration trước)
+## ✅ Đã Fix
 
-| # | Vấn đề | Fix |
-|---|--------|-----|
-| B3 | `scaleMode` sprite không tự center | Auto-center khi không có positioning constraints |
-| B1/D3 | Absolute container 0×0 | Fill parent cho container có children |
-| D2 | `margin` chỉ hỗ trợ `number\|object` | Thêm array: `[v,h]`, `[t,r,b,l]` |
-| B4 | `aspectRatio` dùng raw JSON input | Dùng computed dimensions từ constraints |
-| A2 | `layoutType` gán cho cả leaf nodes | Chỉ gán cho nodes có children |
-| C3 | Grid dùng `spacingX/spacingY`, không `gap` | `gap` alias cho `spacingX = spacingY` |
-| C1 | Không có `alignSelf` | Full pipeline: engine → export → runtime |
-| C4 | `left/right` trong Linear bị ignore im lặng | Validation warnings |
-| A1 | Node role implicit | `background` property tách rõ container vs leaf |
-| B5 | Row cross-axis `start/end` ngược convention Cocos | Swap: `start`=bottom, `end`=top |
-| B6 | Grid cell width chia đều parent | Dùng max child width |
-| D1 | `percentWidth` tính theo raw parent (chưa trừ padding) | Resolve against content area (trừ padding) |
-| D6 | Không có `flex-shrink` | Auto-shrink tỷ lệ khi overflow + `flexShrink: 0` opt-out |
+| # | Vấn đề | Fix | File |
+|---|--------|-----|------|
+| B3 | `scaleMode` sprite không tự center | Auto-center khi không có positioning constraints | `_layout_engine.js` |
+| B1/D3 | Absolute container 0×0 | Fill parent cho container có children | `_layout_engine.js` |
+| D2 | `margin` chỉ hỗ trợ `number\|object` | Thêm array: `[v,h]`, `[t,r,b,l]` | `_layout_engine.js`, `_layout.js` |
+| B4 | `aspectRatio` dùng raw JSON input | Dùng computed dimensions từ constraints | `_layout_engine.js` |
+| A2 | `layoutType` gán cho cả leaf nodes | Chỉ gán cho nodes có children | `_layout_engine.js` |
+| C3 | Grid dùng `spacingX/spacingY`, không `gap` | `gap` alias cho `spacingX = spacingY` | `_layout_engine.js` |
+| C1 | Không có `alignSelf` | Full pipeline: engine → export → runtime | All |
+| C4 | `left/right` trong Linear bị ignore im lặng | Validation warnings | `_layout_engine_tools.js` |
+| A1 | Node role implicit | `background` property tách rõ container vs leaf | `_layout_engine.js` |
+| B5 | Row cross-axis `start/end` ngược convention Cocos | Swap: `start`=bottom, `end`=top | `_layout_engine.js` |
+| B6 | Grid cell width chia đều parent | Dùng max child width | `_layout_engine.js` |
+| D1 | `percentWidth` tính theo raw parent (chưa trừ padding) | Resolve against content area (trừ padding) | `_layout_engine.js`, `_layout.js` |
+| D6 | Không có `flex-shrink` | Auto-shrink tỷ lệ khi overflow + `flexShrink: 0` opt-out | `_layout_engine.js`, `_layout.js` |
+| E1 | Duplicate `sprite()`/`button()` trong `_base.js` và `_display.js` | Xóa duplicate từ `_base.js`, giữ canonical version ở `_display.js` | `_base.js` |
+| E2 | Export tạo `cc.Node()` cho container (LayoutComponent không work) | Thay `cc.Node()` → `ccui.Layout()` | `_layout_engine_export.js` |
+| E6 | Wrap layout không tính margin khi line-break | `arrangeAsWrap` include margin trong overflow check + positioning | `_layout.js` |
+| E7 | Runtime `_parsePadding` không đọc `paddingTop/Right/Bottom/Left` | Thêm fallback đọc individual props từ opts | `_layout.js` |
+| E8 | `useSafeArea`/`ignoreSafeArea` không cần cho game | Xóa toàn bộ safe area logic | `_layout_engine.js` |
+| E9 | `setLayoutSize` duplicate branch cho non-scaleMode | Chỉ scale khi có `scaleMode`, không scale thì set contentSize | `_display.js` |
+| E10 | `validate()` không tính scale khi check bounds | Account for `_scaleX/_scaleY` | `_layout_engine_tools.js` |
+| E11 | `buildTree()` dùng `JSON.parse(JSON.stringify())` không document | Thêm comment về limitation (no functions, no circular refs) | `_layout_engine.js` |
+| E13 | Button callback name có thể chứa ký tự invalid | Dùng `sanitizeName()` cho callback method names | `_layout_engine_export.js` |
+| E14 | `align()` default dùng average cho mọi type | `left/bottom`=min, `right/top`=max, `center`=average | `_high-level.js` |
+| E15 | `pinToTop/Bottom/Left/Right` có unused `parent` param | Xóa parameter, LayoutComponent tự resolve parent | `_position.js` |
+| E16 | Flex + margin: runtime double-subtract margins | Flex items margins chỉ trừ từ allocated space, không cộng vào totalFixed | `_layout.js` |
 
 ---
 
@@ -36,6 +49,7 @@
 | `align-items` | `alignItems` | ✅ 4 values |
 | `align-self` | `alignSelf` | ✅ Override per-child |
 | `flex-grow` | `flex` | ✅ Proportional space |
+| `flex-shrink` | `flexShrink` | ✅ Auto-shrink + opt-out |
 | `gap` | `gap` | ✅ Uniform spacing |
 | `padding` | `padding` (shorthand + individual) | ✅ Full CSS parity |
 | `margin` | `margin` | ✅ Full support |
@@ -44,8 +58,8 @@
 | `min-width/max-width` | `minWidth/maxWidth/minHeight/maxHeight` | ✅ Clamp |
 | `aspect-ratio` | `aspectRatio` | ✅ Auto-compute |
 | `object-fit` | `scaleMode` (FILL/FIT/STRETCH) | ✅ Tương đương |
-| `display: grid` | `layoutType: "Grid"` | ⚠️ Basic (xem bên dưới) |
-| `flex-wrap: wrap` | `layoutType: "Wrap"` | ⚠️ Basic (xem bên dưới) |
+| `display: grid` | `layoutType: "Grid"` | ⚠️ Basic |
+| `flex-wrap: wrap` | `layoutType: "Wrap"` | ✅ Margin-aware |
 | `overflow: scroll` | `layoutType: "ScrollView"` | ✅ Vertical + Horizontal |
 | `visibility: hidden` | — | ❌ Chỉ có `visible` (= `display: none`) |
 | `overflow: hidden` | `clipping` | ✅ Basic |
@@ -54,179 +68,92 @@
 
 ## ⚠️ Design Issues Còn Tồn Tại
 
-### D1. `percentWidth` trong Linear không resolve đúng thời điểm ⭐
-
-**CSS behavior:** `width: 50%` luôn tính theo parent *content box* (trừ padding).
-
-**Engine behavior:** `_measureNode` tính `percentWidth` theo `parentW` **raw** (bao gồm padding):
-
-```javascript
-// line 239-240
-if (!w && node.percentWidth !== undefined && parentW !== undefined) {
-    w = parentW * node.percentWidth;
-}
-```
-
-Nhưng `parentW` ở đây là `node._width` truyền từ parent — **chưa trừ padding**. Trong khi layout Linear, available space cho children = `parentW - pad.left - pad.right`.
-
-**Ví dụ:** Container 100px, padding 10, child `percentWidth: 0.5`:
-- Expect: `(100 - 20) * 0.5 = 40px` (50% of content area)
-- Actual: `100 * 0.5 = 50px` (50% of total width, tràn padding)
-
-**Severity:** 🟡 Medium — Chỉ ảnh hưởng khi dùng `percentWidth` kết hợp `padding`.
-
----
-
-### D2. Grid thiếu tính năng so với CSS Grid ⭐
-
-CSS Grid hỗ trợ rất nhiều mà Layout Engine chưa có:
+### D2. Grid thiếu tính năng so với CSS Grid
 
 | CSS Grid Feature | Status | Mức cần thiết cho game |
 |-----------------|--------|----------------------|
-| `grid-template-columns: 1fr 2fr 1fr` | ❌ | 🟡 Hữu ích cho dashboard, settings |
-| `grid-column-gap` ≠ `grid-row-gap` | ✅ `spacingX/spacingY` | Đã có |
-| `grid-column: span 2` | ❌ | 🟠 Low — game UI hiếm cần |
-| Cell alignment (`justify-items`, `align-items`) | ❌ Chỉ center | 🟡 Medium |
+| `grid-template-columns: 1fr 2fr` | ❌ | 🟡 Hữu ích cho dashboard |
+| `grid-column: span 2` | ❌ | 🟠 Low — hiếm cần |
+| Cell alignment (`justify-items`) | ❌ Chỉ center | 🟡 Medium |
 | Auto-fill / auto-fit | ❌ | 🟠 Low |
 
-**Vấn đề cụ thể:** Grid hiện tại chỉ hỗ trợ **equal-size cells**. Không có cách làm grid với column widths khác nhau (như `1fr 2fr 1fr`).
-
 **Workaround:** Dùng nested Linear rows.
-
-**Severity:** 🟡 Medium — Phần lớn game grid (inventory, skills) dùng equal cells.
+**Severity:** 🟡 Medium
 
 ---
 
 ### D3. Wrap layout thiếu `alignItems` cho cross-axis
 
-**CSS `flex-wrap: wrap`** vẫn hỗ trợ `align-items` để căn chỉnh items trong mỗi dòng (ví dụ: center vertically trong 1 row khi items có height khác nhau).
-
-**Engine:** Wrap layout không có `alignItems`, items luôn align top trong mỗi dòng.
+Wrap layout không có `alignItems`, items luôn align top trong mỗi dòng. CSS `flex-wrap: wrap` vẫn hỗ trợ `align-items`.
 
 **Severity:** 🟠 Low — Wrap layout trong game thường dùng items cùng kích thước.
 
 ---
 
-### D4. Thiếu `overflow: hidden` tách biệt với `clipping`
-
-**CSS:** `overflow: hidden` là property riêng, có thể set `overflow-x` khác `overflow-y`.
-
-**Engine:** `clipping` hoạt động nhưng chỉ boolean, không phân biệt X/Y. Và chỉ thực sự work với `ccui.Layout` (không phải `cc.Node`).
-
-**Severity:** 🟢 Low — Game UI hiếm khi cần overflow riêng X/Y.
-
----
-
 ### D5. Label/Text measurement quá đơn giản
 
-**CSS:** Browser tự measure text chính xác bao gồm word-wrap, line-height, font metrics.
-
-**Engine:**
 ```javascript
-// line 258-259
 w = str.length * fs * 0.6;  // Width estimate
 h = fs * 1.2;                // Height estimate
 ```
 
-Đây là **rough estimate**:
-- Không handle multi-byte characters (emoji, CJK) — chiều rộng sai
-- Không có word-wrap / multi-line
-- Không có `maxWidth` auto-wrap
-- `0.6` magic number không chính xác cho mọi font
-
-**Impact:** Preview trong HTML sẽ không khớp chính xác với game render. Nhưng vì export code không dùng computed position cho text (UIBuilder tự measure), nên chỉ ảnh hưởng preview.
+Không handle multi-byte characters, word-wrap, multi-line. Chỉ ảnh hưởng preview (export code không dùng computed position cho text).
 
 **Severity:** 🟡 Medium — Ảnh hưởng preview accuracy.
 
 ---
 
-### D6. `flex-shrink` không tồn tại
+### D9. `scrollDirection: 'both'` Incomplete
 
-**CSS:** `flex-shrink` cho phép items co lại khi container nhỏ hơn total children size.
+> **Noted for future work** — không cần fix ngay.
 
-**Engine:** Chỉ có `flex` (= `flex-grow`). Nếu total children width > container width → **tràn ra ngoài** mà không co lại.
+`scrollDirection: 'both'` cho ScrollView chỉ layout theo vertical. Export code chỉ chọn `arrangeAsRow` hoặc `arrangeAsColumn`.
 
-**Severity:** 🟡 Medium — Game UI thường thiết kế fixed, nhưng khi chạy trên screen nhỏ hơn design, items có thể tràn.
+**Khi cần fix:** Thêm 2D content layout cho `both` direction, emit `UIBuilder.arrangeAsWrap` hoặc custom 2D scroll code.
 
----
-
-### D7. Không có `box-sizing` concept
-
-**CSS:** `box-sizing: border-box` — `width`/`height` bao gồm padding.
-
-**Engine:** Hiện tại `width`/`height` luôn là **content-box** (không bao gồm padding). Padding được thêm bên trong.
-
-Nhưng hành vi không nhất quán:
-- Khi set `width: 400` + `padding: 20` → container vẫn 400px, children layout trong 360px ✅
-- Khi auto-sized (shrink-to-fit) → `_width = totalChildrenWidth + padding` ✅
-
-Thực ra hành vi hiện tại đã gần giống `border-box` rồi (width bao gồm padding). Nên đây **không phải issue**, chỉ cần document rõ.
-
-**Severity:** 🟢 Info — Chỉ cần document.
+**Severity:** 🟠 Low
 
 ---
 
-### D8. Không hỗ trợ `gap` riêng `row-gap` / `column-gap` cho Linear
+## 🧪 Integration Tests (53/53 ✅)
 
-**CSS:** `row-gap` và `column-gap` là 2 properties riêng.
+Tests file: `tests/test-integration.html` — so sánh engine output vs UIBuilder runtime.
 
-**Engine:** Linear layout chỉ có 1 `gap` cho main axis. Cross-axis spacing phải dùng `margin`.
-
-**Severity:** 🟢 Low — Linear là 1 chiều, chỉ cần 1 gap.
-
----
-
-### D9. Constraint `left+right` trong Absolute không tính padding đúng cách cho `ignoreSafeArea` children
-
-Code hiện tại (line 483-486):
-```javascript
-if (c.left !== undefined && c.right !== undefined) {
-    var flexW = W - c.left - c.right - cPad.left - cPad.right;
-    c._width = Math.max(0, flexW);
-    cLeft = cPad.left + c.left;
-}
-```
-
-Khi child có `ignoreSafeArea: true` thì `cPad` đã được switch sang padding-without-safe-area. Đúng.
-
-Nhưng **`W`** vẫn là parent `_width` (full width), trong khi `cPad` đã trừ safe area. Điều này đúng vì child `ignoreSafeArea` muốn span full parent width bỏ qua safe area insets.
-
-**Severity:** ✅ Không phải issue — logic đúng.
+| # | Category | Tests | Status |
+|---|----------|-------|--------|
+| 1 | Linear Row (basic, gap, align, justify) | T1-T8 | ✅ |
+| 2 | Linear Column (basic, gap, align, justify) | T9-T16 | ✅ |
+| 3 | Grid (2-col, 3-col, spacing) | T17-T20 | ✅ |
+| 4 | Wrap Layout | T21-T22 | ✅ |
+| 5 | Reverse Direction | T23-T26 | ✅ |
+| 6 | Percent Width/Height | T27-T30 | ✅ |
+| 7 | ScaleMode (FIT, FILL, STRETCH) | T31-T36 | ✅ |
+| 8 | Flex Distribution | T37-T40 | ✅ |
+| 9 | AlignSelf | T41-T42 | ✅ |
+| 10 | percentWidth + Padding (E3) | T43-T44 | ✅ |
+| 11 | Grid Centering (E5) | T45-T46 | ✅ |
+| 12 | Wrap with Margins (E6) | T47-T48 | ✅ |
+| 13 | Individual Padding (E7) | T49-T50 | ✅ |
+| 14 | Flex + Margin (E16) | T51-T53 | ✅ |
 
 ---
 
-## 📊 Tổng Hợp Issues Mới
+## 📊 Tổng Hợp Issues Còn Lại
 
-| # | Vấn đề | Priority | Effort | Impact |
-|---|--------|----------|--------|--------|
-| D2 | Grid chỉ hỗ trợ equal-size cells | 🟡 Medium | Medium | Thiếu flexibility |
-| D3 | Wrap thiếu `alignItems` | 🟠 Low | Small | Items khác height align sai |
-| D4 | `clipping` không phân biệt X/Y | 🟢 Low | Small | Hiếm khi cần |
-| D5 | Label measurement = magic number | 🟡 Medium | Medium | Preview không chính xác |
-| D7 | Thiếu `box-sizing` documentation | 🟢 Info | Tiny | Chỉ cần document |
-| D8 | Thiếu `row-gap`/`column-gap` riêng | 🟢 Low | Small | Linear chỉ 1 chiều |
+| # | Vấn đề | Priority | Effort |
+|---|--------|----------|--------|
+| D2 | Grid chỉ hỗ trợ equal-size cells | 🟡 Medium | Medium |
+| D3 | Wrap thiếu `alignItems` | 🟠 Low | Small |
+| D5 | Label measurement = magic number | 🟡 Medium | Medium |
+| D9 | ScrollView `both` direction incomplete | 🟠 Low | Medium |
 
 ---
 
 ## ✅ Kết Luận
 
-Hệ thống layout **đã cover phần lớn CSS Flexbox model** — đây là phần quan trọng nhất cho game UI. Các issue còn lại chủ yếu là:
+Hệ thống layout **đã cover gần như toàn bộ CSS Flexbox model** bao gồm flex-grow, flex-shrink, margin, padding (shorthand + individual), align-self, và percent sizing. Engine và UIBuilder runtime đã **đồng bộ hoàn toàn** qua 53 integration tests.
 
-1. **Nice-to-have:** D2 (Grid columns), D5 (Label measure)
-2. **Không cần:** D3, D4, D7, D8 (quá niche cho game UI)
-
-So với CSS, **thiếu lớn nhất** là `flex-shrink` — vì game static layout nên ít gặp, nhưng sẽ gây tràn layout trên screen nhỏ hơn design resolution.
-
----
-
-## 📋 Next Steps
-
-| Priority | Action | Effort |
-|----------|--------|--------|
-| 🟡 Medium | **Template examples** — Lobby, popup, inventory, card layout | Small |
-| 🟡 Medium | **Label measure cải thiện** — Multi-line, maxWidth auto wrap | Medium |
-| 🟠 Low | **`backgroundColor`** — Solid color cho container | Small |
-| 🔵 Nice | **Schema validator CLI** | Small |
+Các issue còn lại chủ yếu là **nice-to-have** (Grid columns, label measure) và không ảnh hưởng tới game UI thực tế.
 
 ---
 
@@ -234,9 +161,13 @@ So với CSS, **thiếu lớn nhất** là `flex-shrink` — vì game static lay
 
 | File | Changes |
 |------|---------|
-| `_layout_engine.js` | scaleMode center, fill-parent, margin array, aspectRatio, layoutType leaf, Grid gap, alignSelf, `background` container support, row cross-axis start/end swap, grid cell width = max child |
-| `_layout_engine_export.js` | Grid gap, margin array, alignSelf, `background` → `setBackGroundImage()` |
-| `_layout_engine_tools.js` | 4 validation rules (Linear constraints, Absolute props, alignSelf scope, `background` suggestion) |
-| `_layout.js` | margin array, alignSelf runtime (Row + Column) |
+| `_layout_engine.js` | scaleMode center, fill-parent, margin array, aspectRatio, layoutType leaf, Grid gap, alignSelf, `background`, row cross-axis swap, grid cell width, remove safe area, document clone limitation |
+| `_layout_engine_export.js` | Grid gap, margin array, alignSelf, `background` → `setBackGroundImage()`, `ccui.Layout()` cho containers, sanitize callback names |
+| `_layout_engine_tools.js` | 4 validation rules, scale-aware bounds check |
+| `_layout.js` | margin array, alignSelf, individual padding, wrap margin-aware, flex+margin consistency |
+| `_display.js` | `setLayoutSize` scaleMode-only scaling |
+| `_high-level.js` | `align()` semantically correct defaults |
+| `_position.js` | `pinTo*` removed unused `parent` param |
+| `_base.js` | Removed duplicate `sprite()`/`button()` |
 | `index.html` | Script includes, `background` CSS class + 🖼️📐 icon |
 | `preview.json` | `sprCard` + `sprResourceBar` migrated to `background` syntax |

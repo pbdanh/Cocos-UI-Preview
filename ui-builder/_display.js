@@ -90,8 +90,8 @@
         var origSize = node.getContentSize();
         var scaledSprite = false;
 
-        // For sprites/images: scale texture to fit layout size
-        if ((node instanceof cc.Sprite || node instanceof ccui.ImageView) &&
+        // For sprites/images with scaleMode: scale texture to fit layout size
+        if (scaleMode && (node instanceof cc.Sprite || node instanceof ccui.ImageView) &&
             origSize.width > 0 && origSize.height > 0) {
             var sx = w > 0 ? w / origSize.width : Infinity;
             var sy = h > 0 ? h / origSize.height : Infinity;
@@ -104,13 +104,8 @@
                 if (sy === Infinity) sy = 1;
                 node.setScaleX(sx);
                 node.setScaleY(sy);
-            } else if (scaleMode) {
-                // FIT (default when scaleMode is set)
-                var s = Math.min(sx, sy);
-                if (s === Infinity) s = 1;
-                node.setScale(s);
             } else {
-                // No scaleMode: uniform scale to FIT
+                // FIT (default)
                 var s = Math.min(sx, sy);
                 if (s === Infinity) s = 1;
                 node.setScale(s);

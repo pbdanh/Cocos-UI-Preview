@@ -157,6 +157,11 @@ function runRuntime(layout, parentW, parentH) {
     if (layout.alignItems) opts.alignItems = layout.alignItems;
     if (layout.justifyContent) opts.justifyContent = layout.justifyContent;
     if (layout.padding) opts.padding = layout.padding;
+    // Individual padding properties (E7 fix)
+    if (layout.paddingTop !== undefined) opts.paddingTop = layout.paddingTop;
+    if (layout.paddingRight !== undefined) opts.paddingRight = layout.paddingRight;
+    if (layout.paddingBottom !== undefined) opts.paddingBottom = layout.paddingBottom;
+    if (layout.paddingLeft !== undefined) opts.paddingLeft = layout.paddingLeft;
 
     var dir = layout.flexDirection || 'row';
     if (layout.layoutType === 'Grid') {
@@ -991,7 +996,219 @@ addCategory('📐 Percent Width / Height');
 })();
 
 
-// ═══════════════════════════════════════════════════════════════
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CATEGORY 10: percentWidth + Padding (E3)                   ║
+// ╚══════════════════════════════════════════════════════════════╝
+addCategory('📐 E3: percentWidth + Padding');
+
+// T43: Row — percentWidth=0.5 with padding
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 0, alignItems: 'start',
+        padding: 20,
+        children: [
+            { type: 'sprite', name: 'a', width: 0, height: 40, percentWidth: 0.5 },
+            { type: 'sprite', name: 'b', width: 60, height: 40 }
+        ]
+    };
+    var PW = 400, PH = 100;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    // percentWidth=0.5 should resolve against content area (400 - 20 - 20 = 360) → 180
+    compareAndReport('E3: Row — percentWidth=0.5 + padding=20', ep, rp, ['a','b']);
+})();
+
+// T44: Column — percentHeight=0.4 with padding=[10,20,30,40]
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column', gap: 5, alignItems: 'start',
+        padding: [10, 20, 30, 40],
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 0, percentHeight: 0.4 },
+            { type: 'sprite', name: 'b', width: 60, height: 30 }
+        ]
+    };
+    var PW = 200, PH = 300;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    // percentHeight=0.4 against content area (300 - 10 - 30 = 260) → 104
+    compareAndReport('E3: Column — percentHeight=0.4 + padding=[10,20,30,40]', ep, rp, ['a','b']);
+})();
+
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CATEGORY 11: Grid Centering (E5)                           ║
+// ╚══════════════════════════════════════════════════════════════╝
+addCategory('📊 E5: Grid Centering');
+
+// T45: Grid — items smaller than cells, default anchor
+(function() {
+    var layout = {
+        layoutType: 'Grid', columns: 2, gap: 10,
+        children: [
+            { type: 'sprite', name: 'g1', width: 30, height: 20 },
+            { type: 'sprite', name: 'g2', width: 40, height: 25 },
+            { type: 'sprite', name: 'g3', width: 25, height: 30 },
+            { type: 'sprite', name: 'g4', width: 35, height: 15 }
+        ]
+    };
+    var PW = 200, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('E5: Grid — small items in cells (centering)', ep, rp, ['g1','g2','g3','g4']);
+})();
+
+// T46: Grid — varied item sizes with padding
+(function() {
+    var layout = {
+        layoutType: 'Grid', columns: 3, gap: 5,
+        children: [
+            { type: 'sprite', name: 'g1', width: 20, height: 20 },
+            { type: 'sprite', name: 'g2', width: 30, height: 30 },
+            { type: 'sprite', name: 'g3', width: 25, height: 15 },
+            { type: 'sprite', name: 'g4', width: 15, height: 25 },
+            { type: 'sprite', name: 'g5', width: 35, height: 20 },
+            { type: 'sprite', name: 'g6', width: 20, height: 35 }
+        ]
+    };
+    var PW = 200, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('E5: Grid — varied sizes (3 cols, centering)', ep, rp, ['g1','g2','g3','g4','g5','g6']);
+})();
+
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CATEGORY 12: Wrap with Margins (E6)                        ║
+// ╚══════════════════════════════════════════════════════════════╝
+addCategory('🔁 E6: Wrap with Margins');
+
+// T47: Wrap — children with margins
+(function() {
+    var layout = {
+        layoutType: 'Wrap', gap: 5,
+        children: [
+            { type: 'sprite', name: 'w1', width: 60, height: 30, margin: 10 },
+            { type: 'sprite', name: 'w2', width: 60, height: 30, margin: [5, 10] },
+            { type: 'sprite', name: 'w3', width: 60, height: 30, margin: { top: 0, right: 5, bottom: 0, left: 15 } },
+            { type: 'sprite', name: 'w4', width: 60, height: 30, margin: 0 }
+        ]
+    };
+    var PW = 200, PH = 300;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('E6: Wrap — children with margins', ep, rp, ['w1','w2','w3','w4']);
+})();
+
+// T48: Wrap — margins cause earlier line break
+(function() {
+    var layout = {
+        layoutType: 'Wrap', gap: 0,
+        children: [
+            { type: 'sprite', name: 'w1', width: 80, height: 30, margin: [0, 20] },
+            { type: 'sprite', name: 'w2', width: 80, height: 30, margin: [0, 20] },
+            { type: 'sprite', name: 'w3', width: 80, height: 30 }
+        ]
+    };
+    // w1 takes 80+20+20=120, w2 takes 80+20+20=120 → 240 > 200 → w2 wraps
+    var PW = 200, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('E6: Wrap — margin forces earlier line break', ep, rp, ['w1','w2','w3']);
+})();
+
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CATEGORY 13: Individual Padding Properties (E7)            ║
+// ╚══════════════════════════════════════════════════════════════╝
+addCategory('📏 E7: Individual Padding Properties');
+
+// T49: Row — paddingTop/paddingLeft individual properties
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 5, alignItems: 'start',
+        paddingTop: 15, paddingLeft: 20, paddingBottom: 5, paddingRight: 10,
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30 },
+            { type: 'sprite', name: 'b', width: 50, height: 40 }
+        ]
+    };
+    var PW = 300, PH = 100;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('E7: Row — paddingTop/Left/Bottom/Right individual props', ep, rp, ['a','b']);
+})();
+
+// T50: Column — individual padding + alignItems=center
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column', gap: 5, alignItems: 'center',
+        paddingTop: 10, paddingBottom: 20, paddingLeft: 30, paddingRight: 30,
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30 },
+            { type: 'sprite', name: 'b', width: 80, height: 40 }
+        ]
+    };
+    var PW = 200, PH = 200;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('E7: Column — individual padding + center', ep, rp, ['a','b']);
+})();
+
+
+// ╔══════════════════════════════════════════════════════════════╗
+// ║  CATEGORY 14: Flex + Margin Consistency (E16)               ║
+// ╚══════════════════════════════════════════════════════════════╝
+addCategory('🔧 E16: Flex + Margin Consistency');
+
+// T51: Row — flex items with margins
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 0, alignItems: 'start',
+        children: [
+            { type: 'sprite', name: 'a', width: 50, height: 40 },
+            { type: 'sprite', name: 'b', width: 0, height: 40, flex: 1, margin: [0, 10] },
+            { type: 'sprite', name: 'c', width: 0, height: 40, flex: 1, margin: [0, 5] }
+        ]
+    };
+    var PW = 400, PH = 60;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('E16: Row — flex items with margins', ep, rp, ['a','b','c']);
+})();
+
+// T52: Column — flex items with different margins
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'column', gap: 0, alignItems: 'start',
+        children: [
+            { type: 'sprite', name: 'a', width: 60, height: 30 },
+            { type: 'sprite', name: 'b', width: 60, height: 0, flex: 2, margin: 10 },
+            { type: 'sprite', name: 'c', width: 60, height: 0, flex: 1, margin: [5, 0] }
+        ]
+    };
+    var PW = 200, PH = 300;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('E16: Column — flex items with different margins', ep, rp, ['a','b','c']);
+})();
+
+// T53: Row — flex + margin + padding combined
+(function() {
+    var layout = {
+        layoutType: 'Linear', flexDirection: 'row', gap: 5, alignItems: 'center',
+        padding: 15,
+        children: [
+            { type: 'sprite', name: 'a', width: 40, height: 30 },
+            { type: 'sprite', name: 'b', width: 0, height: 30, flex: 1, margin: [0, 10] },
+            { type: 'sprite', name: 'c', width: 0, height: 30, flex: 2, margin: [0, 5] }
+        ]
+    };
+    var PW = 400, PH = 80;
+    var ep = flattenEngine(runEngine(makeEngineJSON(PW, PH, layout)));
+    var rp = runRuntime(layout, PW, PH);
+    compareAndReport('E16: Row — flex + margin + padding combined', ep, rp, ['a','b','c']);
+})();
 //  RENDER RESULTS
 // ═══════════════════════════════════════════════════════════════
 var summaryEl = document.getElementById('summary');

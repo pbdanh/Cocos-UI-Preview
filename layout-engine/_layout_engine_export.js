@@ -307,7 +307,7 @@
                         ln(varName + '.setBackGroundImageScale9Enabled(true);');
                     }
                 } else {
-                    ln('var ' + varName + ' = new cc.Node();');
+                    ln('var ' + varName + ' = new ccui.Layout();');
                 }
                 emitSize(varName, node);
                 ln(varName + '.setName("' + name + '");');
@@ -463,7 +463,7 @@
                 var bv = sanitizeName(bn);
                 ln(bv + '.addClickEventListener(function () {');
                 indent = tab + tab + tab;
-                ln('self._on' + bn.charAt(0).toUpperCase() + bn.slice(1) + '();');
+                ln('self._on' + sanitizeName(bn).charAt(0).toUpperCase() + sanitizeName(bn).slice(1) + '();');
                 indent = tab + tab;
                 ln('});');
             }
@@ -478,7 +478,7 @@
                 if (includeComments) ln('// ── Callbacks ──');
                 for (var cb = 0; cb < buttonNodes.length; cb++) {
                     var cbN = buttonNodes[cb];
-                    var mN = '_on' + cbN.charAt(0).toUpperCase() + cbN.slice(1);
+                    var mN = '_on' + sanitizeName(cbN).charAt(0).toUpperCase() + sanitizeName(cbN).slice(1);
                     var last = (cb === buttonNodes.length - 1);
                     ln(mN + ': function () {');
                     indent = tab + tab;

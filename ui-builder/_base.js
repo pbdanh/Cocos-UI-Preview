@@ -83,25 +83,8 @@ var UIBuilder = {
         return { x: s.width * (pX / 100), y: s.height * (pY / 100) };
     },
 
-    /**
-     * Shorthand: create a bare cc.Sprite (not added to any parent).
-     * Used by generated code from json2code / exportUIBuilderCode.
-     * @param {string} file - Path to image
-     * @returns {cc.Sprite}
-     */
-    sprite: function (file) {
-        return new cc.Sprite(file);
-    },
-
-    /**
-     * Shorthand: create a bare ccui.Button (not added to any parent).
-     * Used by generated code from json2code / exportUIBuilderCode.
-     * @param {string} normalImg - Path to normal state image
-     * @returns {ccui.Button}
-     */
-    button: function (normalImg) {
-        return new ccui.Button(normalImg);
-    },
+    // NOTE: sprite() and button() are defined in _display.js (loaded after _base.js).
+    // Do NOT duplicate them here — _display.js version adds setPressedActionEnabled(true) for buttons.
 
     /**
      * Reference to the shared LayoutEngine constructor.

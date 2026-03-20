@@ -382,9 +382,24 @@
 
     /**
      * Parse padding shorthand into { top, right, bottom, left }.
-     * Accepts: number, [v,h], [t,r,b,l], or { top,right,bottom,left }.
+     * Accepts: number, [v,h], [t,r,b,l], { top,right,bottom,left },
+     * or individual paddingTop/paddingRight/paddingBottom/paddingLeft properties.
+     * @param {*} p  padding value or undefined
+     * @param {Object} [opts]  optional opts object to read paddingTop etc. from
      */
-    function _parsePadding(p) {
+    function _parsePadding(p, opts) {
+        if (!p && opts) {
+            // Try individual padding properties from opts
+            if (opts.paddingTop !== undefined || opts.paddingRight !== undefined ||
+                opts.paddingBottom !== undefined || opts.paddingLeft !== undefined) {
+                return {
+                    top: opts.paddingTop || 0,
+                    right: opts.paddingRight || 0,
+                    bottom: opts.paddingBottom || 0,
+                    left: opts.paddingLeft || 0
+                };
+            }
+        }
         if (!p) return { top: 0, right: 0, bottom: 0, left: 0 };
         if (typeof p === 'number') return { top: p, right: p, bottom: p, left: p };
         if (Array.isArray(p)) {
@@ -456,7 +471,7 @@
         var gap = opts.gap || 0;
         var align = opts.alignItems || 'start';
         var justify = opts.justifyContent || 'start';
-        var pad = _parsePadding(opts.padding);
+        var pad = _parsePadding(opts.padding, opts);
 
         // Shrink-to-fit: auto-size container from children when size is 0
         var containerSize = container.getContentSize();
@@ -493,10 +508,10 @@
             cs = child.getContentSize();
             if (child._flex && child._flex > 0) {
                 totalFlex += child._flex;
+                // Flex items: margins NOT added to totalFixed — they're subtracted from allocated space later
             } else {
-                totalFixed += cs.width;
+                totalFixed += cs.width + margin.left + margin.right;
             }
-            totalFixed += margin.left + margin.right;
             if (i > 0) totalFixed += gap;
         }
 
@@ -505,7 +520,9 @@
             for (i = 0; i < ordered.length; i++) {
                 child = ordered[i];
                 if (child._flex && child._flex > 0) {
-                    var flexW = Math.max(0, (child._flex / totalFlex) * remaining);
+                    margin = _getMargin(child);
+                    var allocated = Math.max(0, (child._flex / totalFlex) * remaining);
+                    var flexW = Math.max(0, allocated - margin.left - margin.right);
                     child.setContentSize(flexW, child.getContentSize().height);
                 }
             }
@@ -633,7 +650,7 @@
         var gap = opts.gap || 0;
         var align = opts.alignItems || 'start';
         var justify = opts.justifyContent || 'start';
-        var pad = _parsePadding(opts.padding);
+        var pad = _parsePadding(opts.padding, opts);
 
         // Shrink-to-fit: auto-size container from children when size is 0
         var containerSize = container.getContentSize();
@@ -670,10 +687,10 @@
             cs = child.getContentSize();
             if (child._flex && child._flex > 0) {
                 totalFlex += child._flex;
+                // Flex items: margins NOT added to totalFixed — they're subtracted from allocated space later
             } else {
-                totalFixed += cs.height;
+                totalFixed += cs.height + margin.top + margin.bottom;
             }
-            totalFixed += margin.top + margin.bottom;
             if (i > 0) totalFixed += gap;
         }
 
@@ -682,7 +699,9 @@
             for (i = 0; i < ordered.length; i++) {
                 child = ordered[i];
                 if (child._flex && child._flex > 0) {
-                    var flexH = Math.max(0, (child._flex / totalFlex) * remaining);
+                    margin = _getMargin(child);
+                    var allocated = Math.max(0, (child._flex / totalFlex) * remaining);
+                    var flexH = Math.max(0, allocated - margin.top - margin.bottom);
                     child.setContentSize(child.getContentSize().width, flexH);
                 }
             }
@@ -849,7 +868,7 @@
         if (!children || children.length === 0) return;
 
         var gap = opts.gap || 0;
-        var pad = _parsePadding(opts.padding);
+        var pad = _parsePadding(opts.padding, opts);
         var parentW = container.getContentSize().width - pad.left - pad.right;
         var parentH = container.getContentSize().height;
 
@@ -860,10 +879,11 @@
         var lineH = 0;
         var rowY = parentH - pad.top;  // Start from top
 
-        // First pass: measure first line height
-        for (var i = 0; i < children.length; i++) {
-            var cs = children[i].getContentSize();
-            lineH = Math.max(lineH, cs.height);
+        // First pass: measure first line height (including margins)
+        for (var fi = 0; fi < children.length; fi++) {
+            var fcs = children[fi].getContentSize();
+            var fm = _getMargin(children[fi]);
+            lineH = Math.max(lineH, fcs.height + fm.top + fm.bottom);
             break;
         }
 
@@ -872,22 +892,24 @@
         for (var i = 0; i < children.length; i++) {
             var child = children[i];
             var cs = child.getContentSize();
+            var margin = _getMargin(child);
             var anchor = child.getAnchorPoint();
 
-            // Wrap to next line if we exceed available width
-            if (i > 0 && (x + cs.width) > (pad.left + parentW + 0.5)) {
+            // Include margin in overflow check for line break
+            var itemTotalW = margin.left + cs.width + margin.right;
+            if (i > 0 && (x + itemTotalW) > (pad.left + parentW + 0.5)) {
                 x = pad.left;
                 rowY -= currentLineH + gap;
                 currentLineH = 0;
             }
 
-            currentLineH = Math.max(currentLineH, cs.height);
+            currentLineH = Math.max(currentLineH, cs.height + margin.top + margin.bottom);
 
-            var posX = x + cs.width * anchor.x;
-            var posY = rowY - cs.height * (1 - anchor.y);
+            var posX = x + margin.left + cs.width * anchor.x;
+            var posY = rowY - margin.top - cs.height * (1 - anchor.y);
 
             child.setPosition(posX, posY);
-            x += cs.width + gap;
+            x += itemTotalW + gap;
         }
     };
 
