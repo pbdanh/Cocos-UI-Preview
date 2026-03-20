@@ -36,7 +36,7 @@ var PreviewLayer = cc.Layer.extend({
         UIBuilder.pinEdges(sprResourceBar, { top: 8, horizontalCenter: true });
 
         // ── rowGold (Row) ──
-        var rowGold = new cc.Node();
+        var rowGold = new ccui.Layout();
         rowGold.setName("rowGold");
         rowGold.setAnchorPoint(0, 0.5);
         sprResourceBar.addChild(rowGold);
@@ -55,7 +55,7 @@ var PreviewLayer = cc.Layer.extend({
         UIBuilder.arrangeAsRow(rowGold, { gap: 5, alignItems: "center" });
 
         // ── rowDiamond (Row) ──
-        var rowDiamond = new cc.Node();
+        var rowDiamond = new ccui.Layout();
         rowDiamond.setName("rowDiamond");
         rowDiamond.setAnchorPoint(1, 0.5);
         sprResourceBar.addChild(rowDiamond);
@@ -74,7 +74,7 @@ var PreviewLayer = cc.Layer.extend({
         UIBuilder.arrangeAsRow(rowDiamond, { gap: 5, alignItems: "center" });
 
         // ── rowContent (Row) ──
-        var rowContent = new cc.Node();
+        var rowContent = new ccui.Layout();
         rowContent.setName("rowContent");
         root.addChild(rowContent);
         UIBuilder.pinEdges(rowContent, { left: 40, right: 40, top: 85, bottom: 15 });
@@ -87,13 +87,13 @@ var PreviewLayer = cc.Layer.extend({
         rowContent.addChild(sprCard);
 
         // ── colCardContent (Column) ──
-        var colCardContent = new cc.Node();
+        var colCardContent = new ccui.Layout();
         colCardContent.setName("colCardContent");
         sprCard.addChild(colCardContent);
         UIBuilder.pinEdges(colCardContent, { left: 20, right: 20, top: 20, bottom: 35 });
 
         // ── rowCardHeader (Row) ──
-        var rowCardHeader = new cc.Node();
+        var rowCardHeader = new ccui.Layout();
         rowCardHeader.setName("rowCardHeader");
         colCardContent.addChild(rowCardHeader);
 
@@ -103,7 +103,7 @@ var PreviewLayer = cc.Layer.extend({
         rowCardHeader.addChild(sprAvatar);
 
         // ── colNameBadge (Column) ──
-        var colNameBadge = new cc.Node();
+        var colNameBadge = new ccui.Layout();
         colNameBadge.setName("colNameBadge");
         rowCardHeader.addChild(colNameBadge);
 
@@ -122,12 +122,12 @@ var PreviewLayer = cc.Layer.extend({
         UIBuilder.arrangeAsRow(rowCardHeader, { gap: 10, alignItems: "center" });
 
         // ── colStats (Column) ──
-        var colStats = new cc.Node();
+        var colStats = new ccui.Layout();
         colStats.setName("colStats");
         colCardContent.addChild(colStats);
 
         // ── rowHP (Row) ──
-        var rowHP = new cc.Node();
+        var rowHP = new ccui.Layout();
         rowHP.setContentSize(rowHP.getContentSize().width, 37);
         rowHP.setName("rowHP");
         colStats.addChild(rowHP);
@@ -161,7 +161,7 @@ var PreviewLayer = cc.Layer.extend({
         UIBuilder.arrangeAsRow(rowHP, { gap: 8, alignItems: "center" });
 
         // ── rowMP (Row) ──
-        var rowMP = new cc.Node();
+        var rowMP = new ccui.Layout();
         rowMP.setContentSize(rowMP.getContentSize().width, 37);
         rowMP.setName("rowMP");
         colStats.addChild(rowMP);
@@ -195,7 +195,7 @@ var PreviewLayer = cc.Layer.extend({
         UIBuilder.arrangeAsRow(rowMP, { gap: 8, alignItems: "center" });
 
         // ── rowSP (Row) ──
-        var rowSP = new cc.Node();
+        var rowSP = new ccui.Layout();
         rowSP.setContentSize(rowSP.getContentSize().width, 37);
         rowSP.setName("rowSP");
         colStats.addChild(rowSP);
@@ -233,7 +233,7 @@ var PreviewLayer = cc.Layer.extend({
         UIBuilder.arrangeAsColumn(colCardContent, { alignItems: "center", justifyContent: "spaceBetween" });
 
         // ── colRightPanel (Column) ──
-        var colRightPanel = new cc.Node();
+        var colRightPanel = new ccui.Layout();
         colRightPanel.setName("colRightPanel");
         rowContent.addChild(colRightPanel);
 
@@ -262,7 +262,7 @@ var PreviewLayer = cc.Layer.extend({
         colRightPanel.addChild(btnUpgrade);
 
         // ── rowStars (Row) ──
-        var rowStars = new cc.Node();
+        var rowStars = new ccui.Layout();
         rowStars.setName("rowStars");
         colRightPanel.addChild(rowStars);
 
