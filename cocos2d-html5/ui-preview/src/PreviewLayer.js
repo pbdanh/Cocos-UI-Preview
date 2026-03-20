@@ -44,13 +44,11 @@ var PreviewLayer = cc.Layer.extend({
 
         // ── iconGold ──
         var iconGold = UIBuilder.sprite(res_preview.iconGold);
-        UIBuilder.setLayoutSize(iconGold, 52, 57);
         iconGold.setName("iconGold");
         rowGold.addChild(iconGold);
 
         // ── sprGoldNum ──
         var sprGoldNum = UIBuilder.sprite(res_preview.sprGoldNum);
-        UIBuilder.setLayoutSize(sprGoldNum, 191, 32);
         sprGoldNum.setName("sprGoldNum");
         rowGold.addChild(sprGoldNum);
 
@@ -65,13 +63,11 @@ var PreviewLayer = cc.Layer.extend({
 
         // ── sprDiamondNum ──
         var sprDiamondNum = UIBuilder.sprite(res_preview.sprDiamondNum);
-        UIBuilder.setLayoutSize(sprDiamondNum, 191, 32);
         sprDiamondNum.setName("sprDiamondNum");
         rowDiamond.addChild(sprDiamondNum);
 
         // ── iconDiamond ──
         var iconDiamond = UIBuilder.sprite(res_preview.iconDiamond);
-        UIBuilder.setLayoutSize(iconDiamond, 58, 52);
         iconDiamond.setName("iconDiamond");
         rowDiamond.addChild(iconDiamond);
 
@@ -81,7 +77,7 @@ var PreviewLayer = cc.Layer.extend({
         var rowContent = new cc.Node();
         rowContent.setName("rowContent");
         root.addChild(rowContent);
-        UIBuilder.pinEdges(rowContent, { left: 20, right: 20, top: 85, bottom: 15 });
+        UIBuilder.pinEdges(rowContent, { left: 40, right: 40, top: 85, bottom: 15 });
 
         // ── sprCard ──
         var sprCard = new ccui.Layout();
@@ -103,7 +99,6 @@ var PreviewLayer = cc.Layer.extend({
 
         // ── sprAvatar ──
         var sprAvatar = UIBuilder.sprite(res_preview.sprAvatar);
-        UIBuilder.setLayoutSize(sprAvatar, 158, 172);
         sprAvatar.setName("sprAvatar");
         rowCardHeader.addChild(sprAvatar);
 
@@ -114,13 +109,11 @@ var PreviewLayer = cc.Layer.extend({
 
         // ── sprName ──
         var sprName = UIBuilder.sprite(res_preview.sprName);
-        UIBuilder.setLayoutSize(sprName, 126, 35);
         sprName.setName("sprName");
         colNameBadge.addChild(sprName);
 
         // ── sprBadge ──
         var sprBadge = UIBuilder.sprite(res_preview.sprBadge);
-        UIBuilder.setLayoutSize(sprBadge, 127, 117);
         sprBadge.setName("sprBadge");
         colNameBadge.addChild(sprBadge);
 
@@ -141,7 +134,6 @@ var PreviewLayer = cc.Layer.extend({
 
         // ── sprTextHP ──
         var sprTextHP = UIBuilder.sprite(res_preview.sprTextHP);
-        UIBuilder.setLayoutSize(sprTextHP, 62, 37);
         sprTextHP.setName("sprTextHP");
         rowHP.addChild(sprTextHP);
         (function() {
@@ -153,7 +145,6 @@ var PreviewLayer = cc.Layer.extend({
 
         // ── iconRed ──
         var iconRed = UIBuilder.sprite(res_preview.iconRed);
-        UIBuilder.setLayoutSize(iconRed, 32, 32);
         iconRed.setName("iconRed");
         rowHP.addChild(iconRed);
 
@@ -177,7 +168,6 @@ var PreviewLayer = cc.Layer.extend({
 
         // ── sprTextMP ──
         var sprTextMP = UIBuilder.sprite(res_preview.sprTextMP);
-        UIBuilder.setLayoutSize(sprTextMP, 62, 36);
         sprTextMP.setName("sprTextMP");
         rowMP.addChild(sprTextMP);
         (function() {
@@ -189,7 +179,6 @@ var PreviewLayer = cc.Layer.extend({
 
         // ── iconYellow ──
         var iconYellow = UIBuilder.sprite(res_preview.iconYellow);
-        UIBuilder.setLayoutSize(iconYellow, 32, 32);
         iconYellow.setName("iconYellow");
         rowMP.addChild(iconYellow);
 
@@ -213,7 +202,6 @@ var PreviewLayer = cc.Layer.extend({
 
         // ── sprTextSP ──
         var sprTextSP = UIBuilder.sprite(res_preview.sprTextSP);
-        UIBuilder.setLayoutSize(sprTextSP, 62, 36);
         sprTextSP.setName("sprTextSP");
         rowSP.addChild(sprTextSP);
         (function() {
@@ -225,7 +213,6 @@ var PreviewLayer = cc.Layer.extend({
 
         // ── iconGreen ──
         var iconGreen = UIBuilder.sprite(res_preview.iconGreen);
-        UIBuilder.setLayoutSize(iconGreen, 32, 32);
         iconGreen.setName("iconGreen");
         rowSP.addChild(iconGreen);
 
@@ -252,7 +239,6 @@ var PreviewLayer = cc.Layer.extend({
 
         // ── sprDecor ──
         var sprDecor = UIBuilder.sprite(res_preview.sprDecor);
-        UIBuilder.setLayoutSize(sprDecor, 339, 251);
         sprDecor.setName("sprDecor");
         colRightPanel.addChild(sprDecor);
 
@@ -265,7 +251,6 @@ var PreviewLayer = cc.Layer.extend({
 
         // ── sprArrowUp ──
         var sprArrowUp = UIBuilder.sprite(res_preview.sprArrowUp);
-        UIBuilder.setLayoutSize(sprArrowUp, 33, 40);
         sprArrowUp.setName("sprArrowUp");
         colRightPanel.addChild(sprArrowUp);
 
@@ -283,31 +268,26 @@ var PreviewLayer = cc.Layer.extend({
 
         // ── star1 ──
         var star1 = UIBuilder.sprite(res_preview.star1);
-        UIBuilder.setLayoutSize(star1, 65, 63);
         star1.setName("star1");
         rowStars.addChild(star1);
 
         // ── star2 ──
         var star2 = UIBuilder.sprite(res_preview.star2);
-        UIBuilder.setLayoutSize(star2, 65, 63);
         star2.setName("star2");
         rowStars.addChild(star2);
 
         // ── star3 ──
         var star3 = UIBuilder.sprite(res_preview.star3);
-        UIBuilder.setLayoutSize(star3, 65, 63);
         star3.setName("star3");
         rowStars.addChild(star3);
 
         // ── star4 ──
         var star4 = UIBuilder.sprite(res_preview.star4);
-        UIBuilder.setLayoutSize(star4, 65, 63);
         star4.setName("star4");
         rowStars.addChild(star4);
 
         // ── star5 ──
         var star5 = UIBuilder.sprite(res_preview.star5);
-        UIBuilder.setLayoutSize(star5, 65, 63);
         star5.setName("star5");
         rowStars.addChild(star5);
 
@@ -315,7 +295,7 @@ var PreviewLayer = cc.Layer.extend({
 
         UIBuilder.arrangeAsColumn(colRightPanel, { gap: 8, alignItems: "center" });
 
-        UIBuilder.arrangeAsRow(rowContent, { gap: 20, alignItems: "center", justifyContent: "spaceBetween" });
+        UIBuilder.arrangeAsRow(rowContent, { gap: 100, alignItems: "center", justifyContent: "center" });
 
         // ── btnReplay ──
         var btnReplay = UIBuilder.button(res_preview.btnReplay);

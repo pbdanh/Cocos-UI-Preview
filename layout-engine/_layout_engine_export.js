@@ -204,6 +204,9 @@
             // Flex weight (consumed by arrangeAsRow/Column at runtime)
             if (node.flex !== undefined && node.flex > 0) ln(varName + '._flex = ' + node.flex + ';');
 
+            // Flex shrink opt-out (consumed by arrangeAsRow/Column at runtime)
+            if (node.flexShrink === 0) ln(varName + '._flexShrink = 0;');
+
             // alignSelf (consumed by arrangeAsRow/Column at runtime)
             if (node.alignSelf) ln(varName + '._alignSelf = "' + node.alignSelf + '";');
         }

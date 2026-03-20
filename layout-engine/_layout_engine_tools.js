@@ -157,7 +157,7 @@
         if (!node) return { ok: false, error: 'Node not found: ' + id };
         node[prop] = value;
         var layoutProps = ['width', 'height', 'left', 'right', 'top', 'bottom',
-            'percentWidth', 'percentHeight', 'flex', 'gap', 'padding', 'margin',
+            'percentWidth', 'percentHeight', 'flex', 'flexShrink', 'gap', 'padding', 'margin',
             'horizontalCenter', 'verticalCenter', 'percentX', 'percentY',
             'visible', 'layoutType', 'flexDirection', 'alignItems', 'justifyContent'];
         var needsRelayout = layoutProps.indexOf(prop) !== -1;

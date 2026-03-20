@@ -511,6 +511,35 @@
             }
         }
 
+        // D6: Flex-shrink — auto-shrink items when overflow
+        var totalAfterFlex = 0;
+        for (i = 0; i < ordered.length; i++) {
+            margin = _getMargin(ordered[i]);
+            cs = ordered[i].getContentSize();
+            totalAfterFlex += cs.width + margin.left + margin.right;
+            if (i > 0) totalAfterFlex += gap;
+        }
+        var overflow = totalAfterFlex - parentW;
+        if (overflow > 0) {
+            var totalItemMain = 0;
+            for (i = 0; i < ordered.length; i++) {
+                child = ordered[i];
+                if (child._flexShrink !== 0) {
+                    totalItemMain += child.getContentSize().width;
+                }
+            }
+            if (totalItemMain > 0) {
+                for (i = 0; i < ordered.length; i++) {
+                    child = ordered[i];
+                    if (child._flexShrink !== 0) {
+                        cs = child.getContentSize();
+                        var reduction = overflow * (cs.width / totalItemMain);
+                        child.setContentSize(Math.max(0, cs.width - reduction), cs.height);
+                    }
+                }
+            }
+        }
+
         // Calculate total width of children + gaps + margins
         var totalW = 0;
         for (i = 0; i < ordered.length; i++) {
@@ -655,6 +684,35 @@
                 if (child._flex && child._flex > 0) {
                     var flexH = Math.max(0, (child._flex / totalFlex) * remaining);
                     child.setContentSize(child.getContentSize().width, flexH);
+                }
+            }
+        }
+
+        // D6: Flex-shrink — auto-shrink items when overflow
+        var totalAfterFlex = 0;
+        for (i = 0; i < ordered.length; i++) {
+            margin = _getMargin(ordered[i]);
+            cs = ordered[i].getContentSize();
+            totalAfterFlex += cs.height + margin.top + margin.bottom;
+            if (i > 0) totalAfterFlex += gap;
+        }
+        var overflow = totalAfterFlex - parentH;
+        if (overflow > 0) {
+            var totalItemMain = 0;
+            for (i = 0; i < ordered.length; i++) {
+                child = ordered[i];
+                if (child._flexShrink !== 0) {
+                    totalItemMain += child.getContentSize().height;
+                }
+            }
+            if (totalItemMain > 0) {
+                for (i = 0; i < ordered.length; i++) {
+                    child = ordered[i];
+                    if (child._flexShrink !== 0) {
+                        cs = child.getContentSize();
+                        var reduction = overflow * (cs.height / totalItemMain);
+                        child.setContentSize(cs.width, Math.max(0, cs.height - reduction));
+                    }
                 }
             }
         }

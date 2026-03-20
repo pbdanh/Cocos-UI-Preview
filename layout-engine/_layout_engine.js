@@ -236,6 +236,12 @@
         var w = node.width;
         var h = node.height;
 
+        // Preview-only size: fallback when width/height not set.
+        // Used for sprite leaf nodes where real size comes from texture at runtime.
+        // _previewWidth/_previewHeight are NOT exported to code.
+        if (w === undefined && node._previewWidth !== undefined) w = node._previewWidth;
+        if (h === undefined && node._previewHeight !== undefined) h = node._previewHeight;
+
         if (!w && node.percentWidth !== undefined && parentW !== undefined) {
             w = parentW * node.percentWidth;
         }
@@ -287,13 +293,19 @@
 
         var childrenCount = node.children ? node.children.length : 0;
 
+        // D1 fix: Pass content area (minus padding) to children,
+        // so percentWidth/percentHeight resolves against available space, not raw parent.
+        var pad = this._getPadding(node);
+        var contentW = Math.max(0, node._width - pad.left - pad.right);
+        var contentH = Math.max(0, node._height - pad.top - pad.bottom);
+
         // 1. Recursive Measure (Bottom-Up) — skip invisible children
         for (var i = 0; i < childrenCount; i++) {
-            this._measureNode(node.children[i], node._width, node._height);
+            this._measureNode(node.children[i], contentW, contentH);
         }
 
         // 2. Wrap-up logic: determine organic component size if dimensions aren't explicitly provided
-        var pad = this._getPadding(node);
+        // (pad already computed above before recursive measure)
 
         if (node.layoutType === 'Linear') {
             var isRow = node.flexDirection === 'row';
@@ -548,6 +560,40 @@
                             c._width = Math.max(0, allocated - m.left - m.right);
                         } else {
                             c._height = Math.max(0, allocated - m.top - m.bottom);
+                        }
+                    }
+                }
+            }
+
+            // --- D6: Flex-shrink — auto-shrink items when overflow ---
+            var totalAfterFlex = 0;
+            for (var i = 0; i < orderedCount; i++) {
+                var c = ordered[i];
+                var m = this._getMargin(c);
+                totalAfterFlex += isRow ? (c._width + m.left + m.right) : (c._height + m.top + m.bottom);
+                if (i < orderedCount - 1) totalAfterFlex += gap;
+            }
+            var overflow = totalAfterFlex - availableMain;
+            if (overflow > 0) {
+                // Shrink proportionally based on each item's main-axis size
+                var totalItemMain = 0;
+                for (var i = 0; i < orderedCount; i++) {
+                    var c = ordered[i];
+                    if (c.flexShrink !== 0) { // flexShrink: 0 = don't shrink
+                        totalItemMain += isRow ? c._width : c._height;
+                    }
+                }
+                if (totalItemMain > 0) {
+                    for (var i = 0; i < orderedCount; i++) {
+                        var c = ordered[i];
+                        if (c.flexShrink !== 0) {
+                            var itemMain = isRow ? c._width : c._height;
+                            var reduction = overflow * (itemMain / totalItemMain);
+                            if (isRow) {
+                                c._width = Math.max(0, c._width - reduction);
+                            } else {
+                                c._height = Math.max(0, c._height - reduction);
+                            }
                         }
                     }
                 }
